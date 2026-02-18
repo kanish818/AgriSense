@@ -1,0 +1,12 @@
+chromadb==0.5.5
+sentence-transformers==3.1.1
+numpy
+torch
+tqdm
+regex
+scikit-learn
+scipy
+nltk
+sentencepiece
+huggingface-hub
+filelock

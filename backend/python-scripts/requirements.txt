@@ -1,0 +1,4 @@
+sentence-transformers==2.2.2
+chromadb==0.4.22
+groq==0.4.2
+numpy==1.24.3

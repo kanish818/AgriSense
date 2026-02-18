@@ -1,0 +1,502 @@
+[
+    {
+        "name": "Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)",
+        "description": "Direct income support to landholding farmer families across India.",
+        "benefits": "₹6,000/year in 3 installments",
+        "link": "https://pmkisan.gov.in",
+        "category": "income",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Pradhan Mantri Fasal Bima Yojana (PMFBY)",
+        "description": "Crop insurance coverage for crop failure due to natural calamities.",
+        "benefits": "Insurance coverage at minimal premium",
+        "link": "https://pmfby.gov.in",
+        "category": "insurance",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Kisan Credit Card (KCC)",
+        "description": "Short-term credit for cultivation, post-harvest, and allied activities.",
+        "benefits": "Loans up to ₹3 lakh at subsidized rates",
+        "link": "https://www.myscheme.gov.in/schemes/kcc",
+        "category": "credit",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Agricultural Infrastructure Fund (AIF)",
+        "description": "Medium to long-term debt financing for post-harvest infrastructure.",
+        "benefits": "3% interest subvention on loans up to ₹2 crore",
+        "link": "https://agriinfra.dac.gov.in",
+        "category": "infrastructure",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Paramparagat Krishi Vikas Yojana (PKVY)",
+        "description": "Promotes organic farming through cluster-based approach.",
+        "benefits": "₹50,000/hectare over 3 years",
+        "link": "https://pgsindia-ncof.gov.in",
+        "category": "organic",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Soil Health Card Scheme",
+        "description": "Provides soil nutrient status and fertilizer recommendations.",
+        "benefits": "Free personalized soil health report",
+        "link": "https://soilhealth.dac.gov.in",
+        "category": "soil",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "PM Kisan Maan-Dhan Yojana",
+        "description": "Pension scheme for small and marginal farmers.",
+        "benefits": "₹3,000/month pension after age 60",
+        "link": "https://maandhan.in",
+        "category": "pension",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Food Security Mission (NFSM)",
+        "description": "Increase production of rice, wheat, pulses, and coarse cereals.",
+        "benefits": "Subsidies on seeds, equipment, and technology",
+        "link": "https://nfsm.gov.in",
+        "category": "production",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Rashtriya Krishi Vikas Yojana (RKVY)",
+        "description": "Supports state-specific agricultural development plans.",
+        "benefits": "Grants for infrastructure and innovation",
+        "link": "https://rkvy.nic.in",
+        "category": "development",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Sub-Mission on Agricultural Mechanization (SMAM)",
+        "description": "Promotes farm mechanization through subsidies.",
+        "benefits": "Up to 50% subsidy on farm machinery",
+        "link": "https://agrimachinery.nic.in",
+        "category": "mechanization",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Beekeeping and Honey Mission (NBHM)",
+        "description": "Promotes scientific beekeeping for income generation.",
+        "benefits": "Training, equipment, and marketing support",
+        "link": "https://nbb.gov.in",
+        "category": "allied",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Micro Irrigation Fund (MIF)",
+        "description": "Promotes drip and sprinkler irrigation systems.",
+        "benefits": "Up to 55% subsidy on micro irrigation systems",
+        "link": "https://pmksy.gov.in",
+        "category": "irrigation",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "PM Krishi Sinchayee Yojana (PMKSY)",
+        "description": "Ensures water availability for farming (Har Khet Ko Paani).",
+        "benefits": "Subsidy on irrigation infrastructure",
+        "link": "https://pmksy.gov.in",
+        "category": "irrigation",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "e-NAM (National Agriculture Market)",
+        "description": "Online trading platform for agricultural commodities.",
+        "benefits": "Better price discovery, transparent trade",
+        "link": "https://enam.gov.in",
+        "category": "market",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Gramin Bhandaran Yojana",
+        "description": "Construction of rural godowns for storage of agricultural produce.",
+        "benefits": "25% subsidy on warehouse construction",
+        "link": "https://agricoop.nic.in",
+        "category": "storage",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Modified Interest Subvention Scheme (MISS)",
+        "description": "Interest subsidy on short-term crop loans.",
+        "benefits": "2% interest subvention + 3% for prompt repayment",
+        "link": "https://agricoop.nic.in",
+        "category": "credit",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Formation of 10,000 FPOs",
+        "description": "Forms Farmer Producer Organizations for collective bargaining.",
+        "benefits": "Equity grant up to ₹15 lakh per FPO",
+        "link": "https://enamfpo.gov.in",
+        "category": "organization",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Mission on Oilseeds and Oil Palm (NMOOP)",
+        "description": "Increase production of oilseeds and oil palm.",
+        "benefits": "Subsidies on seeds, inputs, and planting material",
+        "link": "https://agricoop.nic.in",
+        "category": "production",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Horticulture Mission (NHM)",
+        "description": "Promotes holistic growth of horticulture sector.",
+        "benefits": "Subsidy on planting material and infrastructure",
+        "link": "https://nhm.nic.in",
+        "category": "horticulture",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Dairy Entrepreneurship Development Scheme",
+        "description": "Generates employment through dairy farming.",
+        "benefits": "25-33% capital subsidy for dairy units",
+        "link": "https://dahd.nic.in",
+        "category": "dairy",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Livestock Mission",
+        "description": "Sustainable development of livestock sector.",
+        "benefits": "Training, infrastructure, and breed improvement",
+        "link": "https://dahd.nic.in",
+        "category": "livestock",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Pradhan Mantri Matsya Sampada Yojana",
+        "description": "Sustainable development of fisheries sector.",
+        "benefits": "Up to 60% subsidy for SC/ST/Women",
+        "link": "https://pmmsy.dof.gov.in",
+        "category": "fisheries",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "National Mission on Sustainable Agriculture",
+        "description": "Promotes climate-resilient farming practices.",
+        "benefits": "Soil health, water management, and crop diversification support",
+        "link": "https://nmsa.dac.gov.in",
+        "category": "sustainability",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Agriculture Export Policy",
+        "description": "Promotes agricultural exports and farmer income.",
+        "benefits": "Infrastructure and logistics support for exports",
+        "link": "https://commerce.gov.in",
+        "category": "export",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "PM-AASHA",
+        "description": "Ensures MSP for farmers through Price Support Scheme.",
+        "benefits": "Government procurement at MSP",
+        "link": "https://agricoop.nic.in",
+        "category": "price",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Punjab Crop Diversification Scheme",
+        "description": "Encourages diversification from paddy in Punjab.",
+        "benefits": "₹2,500/acre for switching to alternative crops",
+        "link": "https://agripb.gov.in",
+        "category": "diversification",
+        "states": [
+            "Punjab"
+        ]
+    },
+    {
+        "name": "Punjab Paani Bachao Paisa Kamao",
+        "description": "Direct benefit transfer for electricity savings in agriculture.",
+        "benefits": "₹4/unit saved on electricity in farming",
+        "link": "https://agripb.gov.in",
+        "category": "irrigation",
+        "states": [
+            "Punjab"
+        ]
+    },
+    {
+        "name": "Mera Paani Meri Virasat (Haryana)",
+        "description": "Financial incentive for not growing paddy in dark zone areas.",
+        "benefits": "₹7,000/acre incentive",
+        "link": "https://agriharyana.gov.in",
+        "category": "diversification",
+        "states": [
+            "Haryana"
+        ]
+    },
+    {
+        "name": "Bhavantar Bhugtan Yojana (MP)",
+        "description": "Price deficiency payment scheme in Madhya Pradesh.",
+        "benefits": "Compensates difference between MSP and market price",
+        "link": "https://mpeuparjan.nic.in",
+        "category": "price",
+        "states": [
+            "Madhya Pradesh"
+        ]
+    },
+    {
+        "name": "YSR Rythu Bharosa (Andhra Pradesh)",
+        "description": "Investment support for farmers in AP.",
+        "benefits": "₹13,500/year per farmer family",
+        "link": "https://ysrrythubharosa.ap.gov.in",
+        "category": "income",
+        "states": [
+            "Andhra Pradesh"
+        ]
+    },
+    {
+        "name": "Rythu Bandhu (Telangana)",
+        "description": "Investment support scheme for agriculture in Telangana.",
+        "benefits": "₹10,000/acre per year",
+        "link": "https://treasury.telangana.gov.in",
+        "category": "income",
+        "states": [
+            "Telangana"
+        ]
+    },
+    {
+        "name": "KALIA (Odisha)",
+        "description": "Krushak Assistance for Livelihood and Income Augmentation.",
+        "benefits": "₹25,000/year for small farmers",
+        "link": "https://kalia.odisha.gov.in",
+        "category": "income",
+        "states": [
+            "Odisha"
+        ]
+    },
+    {
+        "name": "Mukhyamantri Kisan Sahay Yojana (Gujarat)",
+        "description": "Crop loss compensation due to natural calamities.",
+        "benefits": "Up to ₹25,000/hectare compensation",
+        "link": "https://agri.gujarat.gov.in",
+        "category": "insurance",
+        "states": [
+            "Gujarat"
+        ]
+    },
+    {
+        "name": "Karnataka Raitha Siri",
+        "description": "Organic farming support scheme in Karnataka.",
+        "benefits": "₹3,000/acre for organic cultivation",
+        "link": "https://raitamitra.karnataka.gov.in",
+        "category": "organic",
+        "states": [
+            "Karnataka"
+        ]
+    },
+    {
+        "name": "TN UZHAVAR Pathukappu Thittam",
+        "description": "Tamil Nadu farmer protection scheme.",
+        "benefits": "Free crop insurance and input subsidies",
+        "link": "https://agri.tn.gov.in",
+        "category": "insurance",
+        "states": [
+            "Tamil Nadu"
+        ]
+    },
+    {
+        "name": "UP Kisan Rin Mochan Yojana",
+        "description": "Farm loan waiver scheme in Uttar Pradesh.",
+        "benefits": "Loan waiver up to ₹1 lakh",
+        "link": "https://upkisankarj.upsdc.gov.in",
+        "category": "credit",
+        "states": [
+            "Uttar Pradesh"
+        ]
+    },
+    {
+        "name": "Rajasthan Mukhyamantri Kisan Mitra Urja Yojana",
+        "description": "Subsidized electricity for agriculture in Rajasthan.",
+        "benefits": "₹1,000/month electricity subsidy",
+        "link": "https://agriculture.rajasthan.gov.in",
+        "category": "irrigation",
+        "states": [
+            "Rajasthan"
+        ]
+    },
+    {
+        "name": "Bihar Diesel Anudan Yojana",
+        "description": "Diesel subsidy for irrigation in Bihar.",
+        "benefits": "₹75/liter subsidy on diesel for irrigation",
+        "link": "https://dbtagriculture.bihar.gov.in",
+        "category": "irrigation",
+        "states": [
+            "Bihar"
+        ]
+    },
+    {
+        "name": "Maharashtra Shetkari Sanman Yojana",
+        "description": "Direct benefit transfer to farmers in Maharashtra.",
+        "benefits": "₹6,000/year per farmer",
+        "link": "https://krishi.maharashtra.gov.in",
+        "category": "income",
+        "states": [
+            "Maharashtra"
+        ]
+    },
+    {
+        "name": "West Bengal Krishak Bandhu",
+        "description": "Financial support for farmers in West Bengal.",
+        "benefits": "₹10,000/year + death benefit of ₹2 lakh",
+        "link": "https://krishakbandhu.net",
+        "category": "income",
+        "states": [
+            "West Bengal"
+        ]
+    },
+    {
+        "name": "Chhattisgarh Rajiv Gandhi Kisan Nyay Yojana",
+        "description": "Input support for paddy producing farmers.",
+        "benefits": "₹9,000/acre for paddy farmers",
+        "link": "https://rgkny.cg.nic.in",
+        "category": "income",
+        "states": [
+            "Chhattisgarh"
+        ]
+    },
+    {
+        "name": "Jharkhand Mukhyamantri Krishi Ashirwad Yojana",
+        "description": "Financial assistance to small and marginal farmers.",
+        "benefits": "₹25,000/year for farmers with up to 5 acres",
+        "link": "https://mmkay.jharkhand.gov.in",
+        "category": "income",
+        "states": [
+            "Jharkhand"
+        ]
+    },
+    {
+        "name": "Kerala SUBHIKSHA KERALAM",
+        "description": "Self-sufficiency mission for agricultural production in Kerala.",
+        "benefits": "Subsidies for organic farming and crop diversification",
+        "link": "https://keralaagriculture.gov.in",
+        "category": "production",
+        "states": [
+            "Kerala"
+        ]
+    },
+    {
+        "name": "Assam CM Samagra Gramya Unnayan Yojana",
+        "description": "Holistic rural development scheme including agriculture.",
+        "benefits": "Financial support for agriculture inputs",
+        "link": "https://cmsguy.assam.gov.in",
+        "category": "development",
+        "states": [
+            "Assam"
+        ]
+    },
+    {
+        "name": "National Bamboo Mission",
+        "description": "Promotes bamboo cultivation for income generation.",
+        "benefits": "Subsidies for bamboo plantation and processing",
+        "link": "https://nbm.nic.in",
+        "category": "allied",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Pradhan Mantri Annadata Aay Sanrakshan Abhiyan",
+        "description": "Procurement at MSP and price deficiency payments.",
+        "benefits": "Ensures farmers get MSP or above for their produce",
+        "link": "https://agricoop.nic.in",
+        "category": "price",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Neem Coated Urea Policy",
+        "description": "Ensures slow release of nitrogen for better soil health.",
+        "benefits": "Increased urea efficiency by up to 10%",
+        "link": "https://fert.nic.in",
+        "category": "soil",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Vivad Se Vishwas II (Farm Disputes)",
+        "description": "Settlement of agricultural disputes and contractual issues.",
+        "benefits": "Quick resolution of farm-related contractual disputes",
+        "link": "https://agricoop.nic.in",
+        "category": "legal",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Agri-Clinics and Agri-Business Centres (ACABC)",
+        "description": "Supports agriculture graduates to set up agri ventures.",
+        "benefits": "44% subsidy (36% for general), training + handholding",
+        "link": "https://acabcmis.gov.in",
+        "category": "entrepreneurship",
+        "states": [
+            "all"
+        ]
+    },
+    {
+        "name": "Venture Capital Assistance for Agri-Business",
+        "description": "SFAC provides venture capital for agri-business startups.",
+        "benefits": "Up to 26% of promoter's equity as soft loan",
+        "link": "https://sfacindia.com",
+        "category": "entrepreneurship",
+        "states": [
+            "all"
+        ]
+    }
+]

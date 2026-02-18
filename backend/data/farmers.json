@@ -1,0 +1,97 @@
+[
+    {
+        "id": "farmer_001",
+        "name": "Rajesh Kumar",
+        "location": "Punjab",
+        "crops": [
+            "Wheat",
+            "Rice",
+            "Cotton"
+        ],
+        "land_size": "10 acres",
+        "soil_type": "Loamy",
+        "irrigation": "Canal and Tubewell",
+        "challenges": "Water scarcity during summer, pest attacks on cotton",
+        "previous_queries": [
+            "Best fertilizer for wheat in winter",
+            "How to control pink bollworm in cotton",
+            "Water-saving irrigation techniques"
+        ]
+    },
+    {
+        "id": "farmer_002",
+        "name": "Suresh Patel",
+        "location": "Gujarat",
+        "crops": [
+            "Cotton",
+            "Groundnut",
+            "Bajra"
+        ],
+        "land_size": "15 acres",
+        "soil_type": "Sandy loam",
+        "irrigation": "Drip irrigation",
+        "challenges": "Irregular rainfall, soil salinity",
+        "previous_queries": [
+            "Organic pest control for groundnut",
+            "Crop rotation strategies",
+            "Government subsidies for drip irrigation"
+        ]
+    },
+    {
+        "id": "farmer_003",
+        "name": "Amit Singh",
+        "location": "Haryana",
+        "crops": [
+            "Wheat",
+            "Mustard",
+            "Sugarcane"
+        ],
+        "land_size": "8 acres",
+        "soil_type": "Clay",
+        "irrigation": "Tubewell",
+        "challenges": "High electricity costs, declining groundwater",
+        "previous_queries": [
+            "Solar pump subsidies",
+            "Mustard disease management",
+            "Crop diversification options"
+        ]
+    },
+    {
+        "id": "farmer_004",
+        "name": "Lakshmi Devi",
+        "location": "Andhra Pradesh",
+        "crops": [
+            "Rice",
+            "Chili",
+            "Turmeric"
+        ],
+        "land_size": "5 acres",
+        "soil_type": "Black soil",
+        "irrigation": "Borewell",
+        "challenges": "Labor shortage, market price fluctuations",
+        "previous_queries": [
+            "Chili export opportunities",
+            "Organic farming certification",
+            "Farm mechanization options"
+        ]
+    },
+    {
+        "id": "farmer_005",
+        "name": "Mohammed Iqbal",
+        "location": "Maharashtra",
+        "crops": [
+            "Soybean",
+            "Cotton",
+            "Jowar"
+        ],
+        "land_size": "12 acres",
+        "soil_type": "Medium black",
+        "irrigation": "Rainfed with supplementary irrigation",
+        "challenges": "Drought conditions, crop insurance claims",
+        "previous_queries": [
+            "Drought-resistant crop varieties",
+            "PMFBY claim process",
+            "Soil moisture conservation techniques"
+        ]
+    }
+]
