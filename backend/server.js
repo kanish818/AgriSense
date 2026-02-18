@@ -26,6 +26,11 @@ app.use("/api/schemes", schemesRoutes);
 app.use("/api/chat", verifyToken, chatRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+// Root (Welcome) Route
+app.get("/", (req, res) => {
+  res.send("<h1>🌱 AgriSense Backend is LIVE!</h1><p>Connected nicely. Use API endpoints.</p>");
+});
+
 // Health check
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
