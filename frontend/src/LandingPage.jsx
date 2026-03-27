@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sun, Cloud, Droplets, Wind, MessageSquare, CreditCard, Menu, X, ChevronDown, Mic, MicOff, Send, Upload, Leaf, Sprout, FileText, ExternalLink, ThermometerSun, MapPin, LogOut, User, Volume2, VolumeX } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9000/api';
 
 export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Core
@@ -42,6 +42,8 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const [financialResult, setFinancialResult] = useState('');
   const [cropForm, setCropForm] = useState({ location: user?.location || '', season: 'Kharif', soilType: '' });
   const [financialTopic, setFinancialTopic] = useState('');
+  const [locationStatus, setLocationStatus] = useState('prompt');
+  const [isRequestingLocation, setIsRequestingLocation] = useState(false);
 
   // 🚜 Profile & Farm Logic
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -113,17 +115,73 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     'Authorization': `Bearer ${token}`
   });
 
+  // Request location permission manually
+  const requestLocationPermission = () => {
+    setIsRequestingLocation(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocationStatus('granted');
+          fetchWeather(pos.coords.latitude, pos.coords.longitude);
+          setIsRequestingLocation(false);
+        },
+        (err) => {
+          console.error("Location permission denied:", err);
+          setLocationStatus('denied');
+          setWeatherError(true);
+          setIsRequestingLocation(false);
+          fetchWeather(28.61, 77.20);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } else {
+      setLocationStatus('unavailable');
+      setWeatherError(true);
+      setIsRequestingLocation(false);
+      fetchWeather(28.61, 77.20);
+    }
+  };
+
   // Scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory]);
 
-  // Fetch weather + schemes
+  // Fetch weather + schemes - check permission first
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
-        () => fetchWeather(28.61, 77.20)
-      );
-    } else fetchWeather(28.61, 77.20);
+    // Check if we already have permission
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((result) => {
+        setLocationStatus(result.state);
+        if (result.state === 'granted') {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+            () => fetchWeather(28.61, 77.20)
+          );
+        } else if (result.state === 'denied') {
+          // User previously denied, use default location (New Delhi)
+          setWeatherError(false);
+          fetchWeather(28.61, 77.20);
+        }
+        // If 'prompt', do nothing — user must click the "Share My Location" button
+      });
+    } else {
+      // Browser doesn't support permissions API — directly try geolocation
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLocationStatus('granted');
+            fetchWeather(pos.coords.latitude, pos.coords.longitude);
+          },
+          () => {
+            setLocationStatus('denied');
+            fetchWeather(28.61, 77.20);
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } else {
+        setLocationStatus('unavailable');
+        fetchWeather(28.61, 77.20);
+      }
+    }
 
     const state = user?.location || '';
     fetch(`${API_BASE}/schemes?state=${encodeURIComponent(state)}&limit=10`)
@@ -239,8 +297,19 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
   const fetchWeather = (lat, lon) => {
     fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}`)
-      .then(r => r.json()).then(d => { if (d.main) setWeather(d); else setWeatherError(true); })
-      .catch(() => setWeatherError(true));
+      .then(r => r.json()).then(d => { 
+        if (d.main) {
+          setWeather(d); 
+          setWeatherError(false);
+        } else {
+          console.error("Weather API error:", d.message);
+          setWeatherError(true);
+        }
+      })
+      .catch((err) => {
+        console.error("Weather fetch error:", err);
+        setWeatherError(true);
+      });
   };
 
   // Chat
@@ -262,12 +331,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       });
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
+      if (res.status === 503 && data.setupGuide) {
+        const botResponse = `⚠️ ${data.response || data.message}\n\nSetup Guide: ${data.setupGuide}`;
+        setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
+        return;
+      }
       const botResponse = data.response || data.message || 'Sorry, something went wrong.';
       setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
-
-      // Auto-speak REMOVED as per request
-    } catch {
-      const errorMsg = '❌ Could not connect to the server.';
+    } catch (err) {
+      console.error("Chat error:", err);
+      const errorMsg = '❌ Could not connect to the server. Please ensure the backend is running.';
       setChatHistory(prev => [...prev, { role: 'bot', content: errorMsg }]);
     } finally { setIsLoading(false); }
   };
@@ -306,12 +379,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       const res = await fetch(`${API_BASE}/analyze-soil`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
+      if (res.status === 503 && data.setupGuide) {
+        setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
       const result = data.crops || data.message || 'Analysis failed.';
       setAnalysisResult(result);
-      // Auto-speak REMOVED
-    } catch {
-      const errorMsg = '❌ Failed to connect.';
-      setAnalysisResult(errorMsg);
+    } catch (err) {
+      console.error("Soil analysis error:", err);
+      setAnalysisResult('❌ Failed to connect to server. Please ensure the backend is running.');
     }
     finally { setAnalysisLoading(false); }
   };
@@ -326,12 +402,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       const res = await fetch(`${API_BASE}/analyze-plant`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
+      if (res.status === 503 && data.setupGuide) {
+        setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
       const result = data.health || data.message || 'Analysis failed.';
       setAnalysisResult(result);
-      // Auto-speak REMOVED
-    } catch {
-      const errorMsg = '❌ Failed to connect.';
-      setAnalysisResult(errorMsg);
+    } catch (err) {
+      console.error("Plant analysis error:", err);
+      setAnalysisResult('❌ Failed to connect to server. Please ensure the backend is running.');
     }
     finally { setAnalysisLoading(false); }
   };
@@ -343,12 +422,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       const res = await fetch(`${API_BASE}/crop-advice`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ...cropForm, language }) });
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
+      if (res.status === 503 && data.setupGuide) {
+        setCropAdviceResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
       const advice = data.advice || data.message || 'No advice.';
       setCropAdviceResult(advice);
-      // Auto-speak REMOVED
-    } catch {
-      const errorMsg = '❌ Server not reachable.';
-      setCropAdviceResult(errorMsg);
+    } catch (err) {
+      console.error("Crop advice error:", err);
+      setCropAdviceResult('❌ Server not reachable. Please ensure the backend is running.');
     }
     finally { setAnalysisLoading(false); }
   };
@@ -360,12 +442,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       const res = await fetch(`${API_BASE}/financial-guidance`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ topic: financialTopic, language }) });
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
+      if (res.status === 503 && data.setupGuide) {
+        setFinancialResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
       const guidance = data.guidance || data.message || 'No guidance.';
       setFinancialResult(guidance);
-      // Auto-speak REMOVED
-    } catch {
-      const errorMsg = '❌ Server not reachable.';
-      setFinancialResult(errorMsg);
+    } catch (err) {
+      console.error("Financial guidance error:", err);
+      setFinancialResult('❌ Server not reachable. Please ensure the backend is running.');
     }
     finally { setAnalysisLoading(false); }
   };
@@ -492,12 +577,12 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={onLogout} // Triggers login modal in AuthedApp wrapper logic
+                <a
+                  href="/auth"
                   className="bg-white text-green-700 px-5 py-2 rounded-full text-sm font-bold hover:bg-gray-100 shadow-md transition-all transform hover:scale-105 active:scale-95"
                 >
                   Login / Sign Up
-                </button>
+                </a>
               )}
             </div>
             <div className="md:hidden flex items-center">
@@ -570,7 +655,23 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                   </div>
                 </div>
               ) : !weatherError ? (
-                <div className="bg-white rounded-2xl shadow-xl p-12 text-center border"><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div><p className="text-gray-500">{content.weather.loading}</p></div>
+                <div className="bg-white rounded-2xl shadow-xl p-12 text-center border">
+                  {locationStatus === 'prompt' ? (
+                    <div>
+                      <MapPin className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-4">Allow access to your location for accurate weather</p>
+                      <button 
+                        onClick={requestLocationPermission}
+                        disabled={isRequestingLocation}
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isRequestingLocation ? 'Requesting...' : '📍 Share My Location'}
+                      </button>
+                    </div>
+                  ) : (
+                    <div><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div><p className="text-gray-500">{content.weather.loading}</p></div>
+                  )}
+                </div>
               ) : (
                 <div className="bg-white rounded-2xl shadow-xl p-12 text-center border border-red-100"><Cloud className="h-12 w-12 text-gray-400 mx-auto mb-4" /><p className="text-gray-500">{content.weather.error}</p></div>
               )}
@@ -622,7 +723,23 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white bg-opacity-10 rounded-xl p-12 text-center"><p className="text-green-200">{weatherError ? content.weather.error : content.weather.loading}</p></div>
+                <div className="bg-white bg-opacity-10 rounded-xl p-12 text-center">
+                  {locationStatus === 'prompt' ? (
+                    <div>
+                      <MapPin className="h-12 w-12 text-white mx-auto mb-4" />
+                      <p className="text-green-200 mb-4">Allow access to your location for accurate weather</p>
+                      <button 
+                        onClick={requestLocationPermission}
+                        disabled={isRequestingLocation}
+                        className="bg-white text-green-800 px-6 py-3 rounded-xl font-medium hover:bg-green-100 transition-colors disabled:opacity-50"
+                      >
+                        {isRequestingLocation ? 'Requesting...' : '📍 Share My Location'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-green-200">{weatherError ? content.weather.error : content.weather.loading}</p>
+                  )}
+                </div>
               )}
             </div>
             <div className="lg:w-1/2">

@@ -3,10 +3,22 @@ const User = require("../models/User");
 const Chat = require("../models/Chat"); // Import the new Chat model
 const { spawn } = require("child_process");
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groqApiKey = process.env.GROQ_API_KEY;
+if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+  console.warn("⚠️  GROQ_API_KEY not configured in chatControllers. Chat feature will not work.");
+}
+const groq = new Groq({ apiKey: groqApiKey });
 
 exports.handleChat = async (req, res) => {
   try {
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({
+        message: "Chat service is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys",
+        response: "Chat service is not available. Please contact the administrator."
+      });
+    }
+    
     const { message, language = "english" } = req.body;
     const userId = req.userId;
 

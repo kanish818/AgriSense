@@ -14,7 +14,25 @@ const weatherRoutes = require("./routes/weather");
 const schemesRoutes = require("./routes/schemes");
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    const allowedOrigins = [
+      'https://agri-sense.vercel.app',
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:4173'
+    ];
+    // Allow requests with no origin (e.g., mobile apps, curl, Render health checks)
+    if (!origin) return callback(null, true);
+    // Allow any Vercel preview deployment
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(null, true); // Allow all for now during development
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Public routes
@@ -54,12 +72,24 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Groq
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const groqApiKey = process.env.GROQ_API_KEY;
+if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+  console.warn("⚠️  GROQ_API_KEY is not configured. AI features (soil analysis, plant disease detection, chat) will not work.");
+  console.warn("   Get your API key from: https://console.groq.com/keys");
+}
+const groq = new Groq({ apiKey: groqApiKey });
 
 // POST /api/analyze-soil (Protected)
 app.post("/api/analyze-soil", verifyToken, upload.single("soilImage"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+    
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({ 
+        message: "Soil analysis is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys"
+      });
+    }
 
     const base64Image = fs.readFileSync(req.file.path).toString("base64");
 
@@ -87,6 +117,13 @@ app.post("/api/analyze-soil", verifyToken, upload.single("soilImage"), async (re
 app.post("/api/analyze-plant", verifyToken, upload.single("plantImage"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No image uploaded" });
+    
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({ 
+        message: "Plant disease detection is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys"
+      });
+    }
 
     const base64Image = fs.readFileSync(req.file.path).toString("base64");
 
@@ -113,6 +150,13 @@ app.post("/api/analyze-plant", verifyToken, upload.single("plantImage"), async (
 // POST /api/crop-advice (Protected)
 app.post("/api/crop-advice", verifyToken, async (req, res) => {
   try {
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({ 
+        message: "Crop advice service is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys"
+      });
+    }
+    
     const { location, season, soilType, language } = req.body;
     const lang = language === "hindi" ? "Hindi" : language === "punjabi" ? "Punjabi" : "English";
 
@@ -133,6 +177,13 @@ app.post("/api/crop-advice", verifyToken, async (req, res) => {
 // POST /api/financial-guidance (Protected)
 app.post("/api/financial-guidance", verifyToken, async (req, res) => {
   try {
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({ 
+        message: "Financial guidance service is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys"
+      });
+    }
+    
     const { topic, language } = req.body;
     const lang = language === "hindi" ? "Hindi" : language === "punjabi" ? "Punjabi" : "English";
 
@@ -153,6 +204,13 @@ app.post("/api/financial-guidance", verifyToken, async (req, res) => {
 // POST /api/location-schemes (Protected) — AI-powered location-based scheme recommendations
 app.post("/api/location-schemes", verifyToken, async (req, res) => {
   try {
+    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+      return res.status(503).json({ 
+        message: "Scheme recommendations service is not configured. Please add GROQ_API_KEY to backend .env file",
+        setupGuide: "Get your API key from: https://console.groq.com/keys"
+      });
+    }
+    
     const { location, language } = req.body;
     const lang = language === "hindi" ? "Hindi" : language === "punjabi" ? "Punjabi" : "English";
 
@@ -170,5 +228,6 @@ app.post("/api/location-schemes", verifyToken, async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// APP_PORT overrides system PORT for local dev; on Render, PORT is set by platform
+const PORT = process.env.APP_PORT || process.env.PORT || 4001;
+app.listen(PORT, () => console.log(`🚀 AgriSense Backend running on port ${PORT}`));
