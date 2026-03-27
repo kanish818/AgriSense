@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
             return res.status(400).json({ message: "Latitude and Longitude required" });
         }
 
-        const apiKey = process.env.OPENWEATHERMAP_KEY;
+        const apiKey = process.env.OPENWEATHERMAP_KEY || 'd71b349a7f6f9acde59e722bf385c172';
         if (!apiKey || apiKey === 'your_openweathermap_key_here') {
             console.error("OPENWEATHERMAP_KEY is not configured in .env file");
             return res.status(503).json({ 
