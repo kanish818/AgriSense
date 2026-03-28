@@ -234,28 +234,48 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     }
   }, []);
 
-  // Speak function with proper voice selection
+  // Speak function with proper voice selection and Cloud TTS fallback
   const speakText = (text) => {
-    if (!synthRef.current) {
-      alert('Text-to-speech is not supported in your browser.');
-      return;
+    // Stop any ongoing speech
+    if (synthRef.current) synthRef.current.cancel();
+    if (window.currentAudio) {
+      window.currentAudio.pause();
+      window.currentAudio = null;
     }
 
-    // Stop any ongoing speech
-    synthRef.current.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    // Language code mapping
     const langCodeMap = {
       english: 'en-IN',
       hindi: 'hi-IN',
       punjabi: 'pa-IN'
     };
     const targetLang = langCodeMap[language] || 'en-IN';
-    utterance.lang = targetLang;
 
-    // Try to find a voice that matches the language
+    // Cloud TTS Fallback execution
+    const playCloudTTS = (textToSpeak, langCode) => {
+      const cleanText = textToSpeak.replace(/[\*\#\_]/g, '');
+      const chunks = cleanText.match(/.{1,150}([\s.!?।]|$)/g) || [cleanText];
+      let i = 0;
+      
+      const playNext = () => {
+        if (i >= chunks.length) {
+          setIsSpeaking(false);
+          return;
+        }
+        const audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode.split('-')[0]}&client=tw-ob&q=${encodeURIComponent(chunks[i])}`);
+        window.currentAudio = audio;
+        audio.onended = () => { i++; playNext(); };
+        audio.onerror = () => { i++; playNext(); };
+        audio.play().catch(e => { console.error('Cloud TTS Audio play error', e); setIsSpeaking(false); });
+      };
+      setIsSpeaking(true);
+      playNext();
+    };
+
+    if (!synthRef.current) {
+      playCloudTTS(text, targetLang);
+      return;
+    }
+
     const voices = synthRef.current.getVoices();
     let selectedVoice = null;
 
@@ -267,10 +287,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       selectedVoice = voices.find(v => v.lang.includes('en-IN') || v.name.toLowerCase().includes('india')) || voices.find(v => v.lang.includes('en'));
     }
 
-    if (selectedVoice) {
-      utterance.voice = selectedVoice;
+    // If the OS is missing the required regional voice package, fallback to pure cloud stream
+    if (!selectedVoice && language !== 'english') {
+      playCloudTTS(text, targetLang);
+      return;
     }
 
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = targetLang;
+    if (selectedVoice) utterance.voice = selectedVoice;
+    
     utterance.rate = 0.85;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -286,10 +312,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   };
 
   const stopSpeaking = () => {
-    if (synthRef.current) {
-      synthRef.current.cancel();
-      setIsSpeaking(false);
+    if (synthRef.current) synthRef.current.cancel();
+    if (window.currentAudio) {
+      window.currentAudio.pause();
+      window.currentAudio.src = "";
+      window.currentAudio = null;
     }
+    setIsSpeaking(false);
   };
 
   const fetchWeather = (lat, lon) => {
