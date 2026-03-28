@@ -17,7 +17,7 @@ const app = express();
 app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
-      'https://agri-sense.vercel.app',
+      'https://agri-sense-lime.vercel.app',
       'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:4173'
