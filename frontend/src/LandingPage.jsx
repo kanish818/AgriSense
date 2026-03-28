@@ -234,7 +234,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     }
   }, []);
 
-  // Speak function with proper voice selection and Cloud TTS fallback
+  // Speak function with bulletproof Cloud TTS for regional languages
   const speakText = (text) => {
     // Stop any ongoing speech
     if (synthRef.current) synthRef.current.cancel();
@@ -250,18 +250,33 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     };
     const targetLang = langCodeMap[language] || 'en-IN';
 
-    // Cloud TTS Fallback execution
+    // Cloud TTS Fallback execution using reliable googleapis endpoint
     const playCloudTTS = (textToSpeak, langCode) => {
       const cleanText = textToSpeak.replace(/[\*\#\_]/g, '');
-      const chunks = cleanText.match(/.{1,150}([\s.!?।]|$)/g) || [cleanText];
+      const chunks = [];
+      let currentChunk = '';
+      const words = cleanText.split(/([\s.!?।]+)/);
+      for (const word of words) {
+        if ((currentChunk + word).length > 180) {
+          if (currentChunk.trim()) chunks.push(currentChunk);
+          currentChunk = word;
+        } else {
+          currentChunk += word;
+        }
+      }
+      if (currentChunk.trim()) chunks.push(currentChunk);
+
       let i = 0;
-      
       const playNext = () => {
         if (i >= chunks.length) {
           setIsSpeaking(false);
           return;
         }
-        const audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode.split('-')[0]}&client=tw-ob&q=${encodeURIComponent(chunks[i])}`);
+        const chunkText = chunks[i].trim();
+        if (!chunkText) {
+          i++; playNext(); return;
+        }
+        const audio = new Audio(`https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${langCode.split('-')[0]}&q=${encodeURIComponent(chunkText)}`);
         window.currentAudio = audio;
         audio.onended = () => { i++; playNext(); };
         audio.onerror = () => { i++; playNext(); };
@@ -271,27 +286,20 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       playNext();
     };
 
+    // FORCE Cloud TTS for Hindi and Punjabi (bypasses broken/missing OS system voices)
+    if (language !== 'english') {
+      playCloudTTS(text, targetLang);
+      return;
+    }
+
+    // Default to Web Speech API for English
     if (!synthRef.current) {
       playCloudTTS(text, targetLang);
       return;
     }
 
     const voices = synthRef.current.getVoices();
-    let selectedVoice = null;
-
-    if (language === 'hindi') {
-      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi') || v.name.includes('हिन्दी'));
-    } else if (language === 'punjabi') {
-      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('pa') || v.name.toLowerCase().includes('punjabi'));
-    } else {
-      selectedVoice = voices.find(v => v.lang.includes('en-IN') || v.name.toLowerCase().includes('india')) || voices.find(v => v.lang.includes('en'));
-    }
-
-    // If the OS is missing the required regional voice package, fallback to pure cloud stream
-    if (!selectedVoice && language !== 'english') {
-      playCloudTTS(text, targetLang);
-      return;
-    }
+    const selectedVoice = voices.find(v => v.lang.includes('en-IN') || v.name.toLowerCase().includes('india')) || voices.find(v => v.lang.includes('en'));
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = targetLang;
