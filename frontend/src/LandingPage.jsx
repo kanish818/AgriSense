@@ -250,7 +250,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     };
     const targetLang = langCodeMap[language] || 'en-IN';
 
-    // Cloud TTS Fallback execution using reliable googleapis endpoint
+    // Cloud TTS Fallback execution using reliable internal proxy endpoint
     const playCloudTTS = (textToSpeak, langCode) => {
       const cleanText = textToSpeak.replace(/[\*\#\_]/g, '');
       const chunks = [];
@@ -276,7 +276,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         if (!chunkText) {
           i++; playNext(); return;
         }
-        const audio = new Audio(`https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${langCode.split('-')[0]}&q=${encodeURIComponent(chunkText)}`);
+        const audio = new Audio(`${API_BASE}/tts?lang=${langCode}&text=${encodeURIComponent(chunkText)}`);
         window.currentAudio = audio;
         audio.onended = () => { i++; playNext(); };
         audio.onerror = () => { i++; playNext(); };

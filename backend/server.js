@@ -40,6 +40,33 @@ app.use("/api/auth", authRoutes);
 app.use("/api/weather", weatherRoutes);
 app.use("/api/schemes", schemesRoutes);
 
+// TTS Proxy Route (Fixes browser blocks for Google Cloud TTS)
+const axios = require("axios");
+app.get("/api/tts", async (req, res) => {
+  try {
+    const { text, lang } = req.query;
+    if (!text) return res.status(400).json({ message: "Text required" });
+    const targetLang = lang ? lang.split('-')[0] : 'hi';
+    const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${targetLang}&q=${encodeURIComponent(text)}`;
+    
+    const response = await axios({
+      url,
+      method: "GET",
+      responseType: "stream",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+      }
+    });
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    response.data.pipe(res);
+  } catch (error) {
+    console.error("TTS Proxy Error:", error.message);
+    res.status(500).json({ message: "TTS streaming failed" });
+  }
+});
+
 // Protected routes
 app.use("/api/chat", verifyToken, chatRoutes);
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
