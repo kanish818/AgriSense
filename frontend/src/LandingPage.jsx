@@ -459,7 +459,9 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
   useEffect(() => {
     const fn = () => setLangDropdownOpen(false);
-    if (langDropdownOpen) document.addEventListener('click', fn);
+    if (langDropdownOpen) {
+      setTimeout(() => document.addEventListener('click', fn), 0);
+    }
     return () => document.removeEventListener('click', fn);
   }, [langDropdownOpen]);
 
