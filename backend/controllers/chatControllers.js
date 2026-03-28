@@ -84,7 +84,8 @@ exports.handleChat = async (req, res) => {
     `.trim();
 
     const system_prompt = `You are AgriSense, an expert agricultural AI assistant for Indian farmers. 
-    Provide a DETAILED, COMPREHENSIVE, and PRACTICAL answer in ${target_lang}.
+    You MUST respond ENTIRELY and EXCLUSIVELY in ${target_lang}. 
+    Even if the user asks a question in English or another language, YOUR OUTPUT MUST BE TRANSLATED TO AND RESPONDED IN ${target_lang}.
     
     USE THE FARMER'S PROFILE DATA TO PERSONALIZE YOUR ADVICE.
     For example, if they have 'Black Soil', recommend crops suitable for that.
@@ -99,7 +100,7 @@ exports.handleChat = async (req, res) => {
     
     Do NOT be concise. Give the farmer full dominance over the topic.`;
 
-    const user_prompt = `FARMER PROFILE: ${profile_str}\n\nQUESTION: ${message}\n\nANSWER:`;
+    const user_prompt = `FARMER PROFILE: ${profile_str}\n\nQUESTION: ${message}\n\nIMPORTANT RESTRICTION: You MUST answer the above question ENTIRELY in ${target_lang}, regardless of what language the question was asked in.\n\nANSWER IN ${target_lang.toUpperCase()}:`;
 
     try {
       // Construct message array with history
