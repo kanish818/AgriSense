@@ -329,6 +329,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         headers: authHeaders(),
         body: JSON.stringify({ message: userMsg, language })
       });
+
+      // Handle cases where the backend (Render) returns a 502/503 HTML error page during deployment or sleep
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error("Server is restarting or deploying updates. Please wait a moment and try again.");
+      }
+
       const data = await res.json();
       if (res.status === 401) { onRequireAuth(); return; }
       if (res.status === 503 && data.setupGuide) {
@@ -336,11 +343,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
         return;
       }
+      
       const botResponse = data.response || data.message || 'Sorry, something went wrong.';
       setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
     } catch (err) {
       console.error("Chat error:", err);
-      const errorMsg = '❌ Could not connect to the server. Please ensure the backend is running.';
+      // Give a contextual warning if the server is starting
+      const isRestarting = err.message.includes('restarting') || err.message.includes('Unexpected token');
+      const errorMsg = isRestarting 
+        ? '⏳ The AI server is currently restarting or deploying updates. Please wait about 30 seconds and ask again.' 
+        : '❌ Could not connect to the server. Please ensure your internet is stable and the backend is running.';
       setChatHistory(prev => [...prev, { role: 'bot', content: errorMsg }]);
     } finally { setIsLoading(false); }
   };
