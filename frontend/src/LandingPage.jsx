@@ -257,18 +257,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
     // Try to find a voice that matches the language
     const voices = synthRef.current.getVoices();
+    let selectedVoice = null;
 
-    // First, try to find exact match (e.g., hi-IN)
-    let selectedVoice = voices.find(voice => voice.lang === targetLang);
-
-    // If not found, try language prefix (e.g., 'hi' for Hindi, 'pa' for Punjabi)
-    if (!selectedVoice) {
-      const langPrefix = targetLang.split('-')[0];
-      selectedVoice = voices.find(voice => voice.lang.startsWith(langPrefix));
+    if (language === 'hindi') {
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('hi') || v.name.toLowerCase().includes('hindi') || v.name.includes('हिन्दी'));
+    } else if (language === 'punjabi') {
+      selectedVoice = voices.find(v => v.lang.toLowerCase().includes('pa') || v.name.toLowerCase().includes('punjabi'));
+    } else {
+      selectedVoice = voices.find(v => v.lang.includes('en-IN') || v.name.toLowerCase().includes('india')) || voices.find(v => v.lang.includes('en'));
     }
-
-    // If still not found, we rely on the browser's default for the language (utterance.lang)
-    // No explicit English fallback here.
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
