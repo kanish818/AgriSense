@@ -774,7 +774,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
             <div className="flex-1 p-4 overflow-y-auto bg-gray-50 space-y-3">
               {chatHistory.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'bg-green-800 text-white rounded-br-md' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'}`}>{msg.content}</div>
+                  <div className={`max-w-[85%] p-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${msg.role === 'user' ? 'bg-green-800 text-white rounded-br-md' : 'bg-white border border-gray-200 text-gray-800 rounded-bl-md shadow-sm'}`}>
+                    {msg.content}
+                    {msg.role === 'bot' && (
+                      <div className="mt-2 text-right">
+                        <button onClick={() => speakText(msg.content)} className="inline-flex items-center gap-1 text-xs text-gray-400 hover:text-green-600 transition-colors">
+                          <Volume2 size={14} /> Listen
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
               {isLoading && (
