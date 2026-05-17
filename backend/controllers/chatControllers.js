@@ -139,11 +139,20 @@ exports.handleChat = async (req, res) => {
       );
 
       // 5. BACKGROUND RAG (Optional - still useful for vector search later)
-      const pythonInput = JSON.stringify({ message, answer, farmer_profile });
-      spawn("python", ["python-scripts/save_to_rag.py", pythonInput], {
-        detached: true,
-        stdio: 'ignore'
-      }).unref();
+      // Never block primary chat response on this side-effect.
+      try {
+        const pythonInput = JSON.stringify({ message, answer, farmer_profile });
+        const ragProcess = spawn("python", ["python-scripts/save_to_rag.py", pythonInput], {
+          detached: true,
+          stdio: 'ignore'
+        });
+        ragProcess.on("error", (spawnError) => {
+          console.warn("RAG background save skipped:", spawnError.message);
+        });
+        ragProcess.unref();
+      } catch (spawnError) {
+        console.warn("RAG background save skipped:", spawnError.message);
+      }
 
       res.json({
         response: answer,

@@ -2,6 +2,10 @@ const express = require("express");
 const router = express.Router();
 const User = require("../models/User");
 const { generateToken, verifyToken } = require("../middleware/auth");
+const { OAuth2Client } = require("google-auth-library");
+
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClient = googleClientId ? new OAuth2Client(googleClientId) : null;
 
 // POST /api/auth/signup
 router.post("/signup", async (req, res) => {
@@ -17,7 +21,7 @@ router.post("/signup", async (req, res) => {
             return res.status(400).json({ message: "Email already registered. Please login." });
         }
 
-        const user = await User.create({ name, email, password, location, language });
+        const user = await User.create({ name, email, password, location, language, authProvider: "local" });
         const token = generateToken(user._id);
 
         res.status(201).json({
@@ -45,6 +49,10 @@ router.post("/login", async (req, res) => {
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
+        if (user.authProvider === "google" && !user.password) {
+            return res.status(400).json({ message: "This account uses Google sign-in. Please continue with Google." });
+        }
+
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid email or password" });
@@ -60,6 +68,63 @@ router.post("/login", async (req, res) => {
     } catch (error) {
         console.error("Login Error:", error);
         res.status(500).json({ message: "Server error during login", error: error.message || error.toString() });
+    }
+});
+
+// POST /api/auth/google
+router.post("/google", async (req, res) => {
+    try {
+        if (!googleClient) {
+            return res.status(503).json({ message: "Google sign-in is not configured on the server." });
+        }
+
+        const { credential, location, language } = req.body;
+        if (!credential) {
+            return res.status(400).json({ message: "Google credential is required" });
+        }
+
+        const ticket = await googleClient.verifyIdToken({
+            idToken: credential,
+            audience: googleClientId
+        });
+
+        const payload = ticket.getPayload();
+        if (!payload?.email || !payload.email_verified) {
+            return res.status(400).json({ message: "Google account email is not verified." });
+        }
+
+        let user = await User.findOne({
+            $or: [{ googleId: payload.sub }, { email: payload.email.toLowerCase() }]
+        });
+
+        if (!user) {
+            user = await User.create({
+                name: payload.name || payload.email.split("@")[0],
+                email: payload.email.toLowerCase(),
+                googleId: payload.sub,
+                authProvider: "google",
+                location: location || "",
+                language: language || "english"
+            });
+        } else {
+            const updates = {};
+            if (!user.googleId) updates.googleId = payload.sub;
+            if (user.authProvider !== "google") updates.authProvider = "google";
+            if (!user.name && payload.name) updates.name = payload.name;
+            if (Object.keys(updates).length > 0) {
+                user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
+            }
+        }
+
+        const token = generateToken(user._id);
+        return res.json({
+            message: "Google login successful!",
+            token,
+            user: { id: user._id, name: user.name, email: user.email, location: user.location, language: user.language }
+        });
+    } catch (error) {
+        console.error("Google Login Error:", error);
+        return res.status(500).json({ message: "Google sign-in failed", error: error.message || error.toString() });
     }
 });
 

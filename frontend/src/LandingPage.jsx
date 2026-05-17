@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sun, Cloud, Droplets, Wind, MessageSquare, CreditCard, Menu, X, ChevronDown, Mic, MicOff, Send, Upload, Leaf, Sprout, FileText, ExternalLink, ThermometerSun, MapPin, LogOut, User, Volume2, VolumeX } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+const DEFAULT_WEATHER_COORDS = { lat: 28.61, lon: 77.2 };
+const API_TIMEOUT_MS = 20000;
 
 export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Core
@@ -14,6 +17,9 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const [weather, setWeather] = useState(null);
   const [schemes, setSchemes] = useState([]);
   const [weatherError, setWeatherError] = useState(false);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [schemesLoading, setSchemesLoading] = useState(true);
+  const [schemesError, setSchemesError] = useState('');
 
   // Chat
   const [chatMessage, setChatMessage] = useState('');
@@ -27,6 +33,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const recognitionRef = useRef(null);
   const synthRef = useRef(null);
+  const isChatOpenRef = useRef(false);
+  const voiceResponseEnabledRef = useRef(false);
+  const speechSessionRef = useRef(0);
+  const voiceStartTimeoutRef = useRef(null);
 
   // Modals
   const [showSoilModal, setShowSoilModal] = useState(false);
@@ -44,6 +54,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const [financialTopic, setFinancialTopic] = useState('');
   const [locationStatus, setLocationStatus] = useState('prompt');
   const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+  const [locationPromptClosed, setLocationPromptClosed] = useState(false);
 
   // 🚜 Profile & Farm Logic
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -53,13 +64,42 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   });
   const [newCropHistory, setNewCropHistory] = useState({ cropName: '', season: '', year: new Date().getFullYear(), yield: '', notes: '' });
 
+  const requestWithTimeout = async (url, options = {}, timeoutMs = API_TIMEOUT_MS) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      const contentType = response.headers.get('content-type') || '';
+      let data = null;
+
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = text ? { message: text.slice(0, 300) } : null;
+      }
+
+      return { ok: response.ok, status: response.status, data, contentType };
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return { ok: false, status: 0, data: null, error: 'timeout' };
+      }
+      return { ok: false, status: 0, data: null, error: error.message || 'network_error' };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const fallbackWeather = () => fetchWeather(DEFAULT_WEATHER_COORDS.lat, DEFAULT_WEATHER_COORDS.lon, true);
+
   // Fetch Profile
   const fetchProfile = async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${API_BASE}/auth/me`, { headers: authHeaders() });
-      const data = await res.json();
-      if (data.user) {
+      const res = await requestWithTimeout(`${API_BASE}/auth/me`, { headers: authHeaders() });
+      const data = res.data || {};
+      if (res.ok && data.user) {
         setProfileData({
           farmDetails: data.user.farmDetails || {},
           cropHistory: data.user.cropHistory || []
@@ -71,7 +111,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Update Profile
   const updateProfile = async () => {
     try {
-      const res = await fetch(`${API_BASE}/auth/profile`, {
+      const res = await requestWithTimeout(`${API_BASE}/auth/profile`, {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify({
@@ -79,22 +119,30 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
           location: user.location
         })
       });
-      if (res.ok) alert('✅ Farm Profile Updated!');
+      if (res.ok) {
+        alert('✅ Farm Profile Updated!');
+      } else if (res.status === 401) {
+        onRequireAuth('Your session expired. Please login again.');
+      } else {
+        alert(`❌ ${res.data?.message || 'Update failed'}`);
+      }
     } catch (e) { alert('❌ Update failed'); }
   };
 
   // Add Crop History
   const addCropHistory = async () => {
     try {
-      const res = await fetch(`${API_BASE}/auth/crop-history`, {
+      const res = await requestWithTimeout(`${API_BASE}/auth/crop-history`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(newCropHistory)
       });
-      const data = await res.json();
+      const data = res.data || {};
       if (res.ok) {
         setProfileData(prev => ({ ...prev, cropHistory: data.history }));
         setNewCropHistory({ cropName: '', season: '', year: new Date().getFullYear(), yield: '', notes: '' });
+      } else if (res.status === 401) {
+        onRequireAuth('Your session expired. Please login again.');
       }
     } catch (e) { alert('❌ Failed to add history'); }
   };
@@ -104,7 +152,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Auth gate — if user tries to use feature but not logged in
   const requireAuth = (fn) => {
     if (!user || !token) {
-      onRequireAuth();
+      onRequireAuth('Please login to use this feature.');
       return;
     }
     fn();
@@ -118,27 +166,26 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Request location permission manually
   const requestLocationPermission = () => {
     setIsRequestingLocation(true);
+    setLocationPromptClosed(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setLocationStatus('granted');
-          fetchWeather(pos.coords.latitude, pos.coords.longitude);
+          fetchWeather(pos.coords.latitude, pos.coords.longitude, false);
           setIsRequestingLocation(false);
         },
         (err) => {
           console.error("Location permission denied:", err);
           setLocationStatus('denied');
-          setWeatherError(true);
           setIsRequestingLocation(false);
-          fetchWeather(28.61, 77.20);
+          fallbackWeather();
         },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     } else {
       setLocationStatus('unavailable');
-      setWeatherError(true);
       setIsRequestingLocation(false);
-      fetchWeather(28.61, 77.20);
+      fallbackWeather();
     }
   };
 
@@ -153,15 +200,18 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         setLocationStatus(result.state);
         if (result.state === 'granted') {
           navigator.geolocation.getCurrentPosition(
-            (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
-            () => fetchWeather(28.61, 77.20)
+            (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude, false),
+            () => fallbackWeather()
           );
         } else if (result.state === 'denied') {
           // User previously denied, use default location (New Delhi)
           setWeatherError(false);
-          fetchWeather(28.61, 77.20);
+          setLocationPromptClosed(true);
+          fallbackWeather();
         }
         // If 'prompt', do nothing — user must click the "Share My Location" button
+      }).catch(() => {
+        setLocationStatus('prompt');
       });
     } else {
       // Browser doesn't support permissions API — directly try geolocation
@@ -169,27 +219,48 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             setLocationStatus('granted');
-            fetchWeather(pos.coords.latitude, pos.coords.longitude);
+            setLocationPromptClosed(true);
+            fetchWeather(pos.coords.latitude, pos.coords.longitude, false);
           },
           () => {
             setLocationStatus('denied');
-            fetchWeather(28.61, 77.20);
+            setLocationPromptClosed(true);
+            fallbackWeather();
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('unavailable');
-        fetchWeather(28.61, 77.20);
+        setLocationPromptClosed(true);
+        fallbackWeather();
       }
     }
 
     const state = user?.location || '';
-    fetch(`${API_BASE}/schemes?state=${encodeURIComponent(state)}&limit=10`)
-      .then(r => r.json()).then(d => { if (Array.isArray(d)) setSchemes(d); })
-      .catch(() => { });
+    setSchemesLoading(true);
+    setSchemesError('');
+    requestWithTimeout(`${API_BASE}/schemes?state=${encodeURIComponent(state)}&limit=10`)
+      .then((res) => {
+        if (res.ok && Array.isArray(res.data)) {
+          setSchemes(res.data);
+          setSchemesError('');
+        } else {
+          setSchemes([]);
+          setSchemesError('Unable to load schemes right now.');
+        }
+      })
+      .catch(() => {
+        setSchemes([]);
+        setSchemesError('Unable to load schemes right now.');
+      })
+      .finally(() => setSchemesLoading(false));
   }, []);
 
   // Welcome message for chat
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+  }, [isChatOpen]);
+
   useEffect(() => {
     if (isChatOpen && chatHistory.length === 0) {
       const welcome = {
@@ -212,10 +283,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       recognition.lang = langCodes[language] || 'en-IN';
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        setChatMessage(transcript);
+        setIsListening(false);
+        if (transcript?.trim()) {
+          sendChatMessage(transcript.trim(), { autoSpeakResponse: true });
+        }
+      };
+      recognition.onerror = () => {
+        voiceResponseEnabledRef.current = false;
         setIsListening(false);
       };
-      recognition.onerror = () => setIsListening(false);
       recognition.onend = () => setIsListening(false);
       recognitionRef.current = recognition;
     }
@@ -236,10 +312,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
   // Speak function with bulletproof Cloud TTS for regional languages
   const speakText = (text) => {
+    speechSessionRef.current += 1;
+    const sessionId = speechSessionRef.current;
+
     // Stop any ongoing speech
     if (synthRef.current) synthRef.current.cancel();
     if (window.currentAudio) {
+      window.currentAudio.onended = null;
+      window.currentAudio.onerror = null;
       window.currentAudio.pause();
+      window.currentAudio.src = "";
       window.currentAudio = null;
     }
 
@@ -268,6 +350,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
       let i = 0;
       const playNext = () => {
+        if (speechSessionRef.current !== sessionId) {
+          setIsSpeaking(false);
+          return;
+        }
         if (i >= chunks.length) {
           setIsSpeaking(false);
           return;
@@ -278,8 +364,16 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         }
         const audio = new Audio(`${API_BASE}/tts?lang=${langCode}&text=${encodeURIComponent(chunkText)}`);
         window.currentAudio = audio;
-        audio.onended = () => { i++; playNext(); };
-        audio.onerror = () => { i++; playNext(); };
+        audio.onended = () => {
+          if (speechSessionRef.current !== sessionId) return;
+          i++;
+          playNext();
+        };
+        audio.onerror = () => {
+          if (speechSessionRef.current !== sessionId) return;
+          i++;
+          playNext();
+        };
         audio.play().catch(e => { console.error('Cloud TTS Audio play error', e); setIsSpeaking(false); });
       };
       setIsSpeaking(true);
@@ -309,8 +403,14 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     utterance.pitch = 1;
     utterance.volume = 1;
 
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onstart = () => {
+      if (speechSessionRef.current !== sessionId) return;
+      setIsSpeaking(true);
+    };
+    utterance.onend = () => {
+      if (speechSessionRef.current !== sessionId) return;
+      setIsSpeaking(false);
+    };
     utterance.onerror = (e) => {
       console.error('TTS Error:', e);
       setIsSpeaking(false);
@@ -320,8 +420,11 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   };
 
   const stopSpeaking = () => {
+    speechSessionRef.current += 1;
     if (synthRef.current) synthRef.current.cancel();
     if (window.currentAudio) {
+      window.currentAudio.onended = null;
+      window.currentAudio.onerror = null;
       window.currentAudio.pause();
       window.currentAudio.src = "";
       window.currentAudio = null;
@@ -329,76 +432,131 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     setIsSpeaking(false);
   };
 
-  const fetchWeather = (lat, lon) => {
-    fetch(`${API_BASE}/weather?lat=${lat}&lon=${lon}`)
-      .then(r => r.json()).then(d => { 
-        if (d.main) {
-          setWeather(d); 
-          setWeatherError(false);
-        } else {
-          console.error("Weather API error:", d.message);
-          setWeatherError(true);
-        }
-      })
-      .catch((err) => {
-        console.error("Weather fetch error:", err);
-        setWeatherError(true);
-      });
+  const stopListening = () => {
+    try {
+      recognitionRef.current?.abort?.();
+    } catch (error) {
+      console.error('Voice recognition abort error:', error);
+    }
+    setIsListening(false);
   };
 
-  // Chat
-  const handleChatSubmit = async (e) => {
-    e?.preventDefault();
-    if (!chatMessage.trim() || isLoading) return;
-    if (!token) { onRequireAuth(); return; }
+  const closeChatAssistant = () => {
+    voiceResponseEnabledRef.current = false;
+    if (voiceStartTimeoutRef.current) {
+      clearTimeout(voiceStartTimeoutRef.current);
+      voiceStartTimeoutRef.current = null;
+    }
+    stopListening();
+    stopSpeaking();
+    setIsChatOpen(false);
+  };
 
-    const userMsg = chatMessage.trim();
+  useEffect(() => {
+    return () => {
+      voiceResponseEnabledRef.current = false;
+      if (voiceStartTimeoutRef.current) {
+        clearTimeout(voiceStartTimeoutRef.current);
+        voiceStartTimeoutRef.current = null;
+      }
+      stopListening();
+      stopSpeaking();
+    };
+  }, []);
+
+  const fetchWeather = async (lat, lon, isFallback) => {
+    setWeatherLoading(true);
+    const res = await requestWithTimeout(`${API_BASE}/weather?lat=${lat}&lon=${lon}`, {}, 12000);
+    if (res.ok && res.data?.main) {
+      setWeather(res.data);
+      setWeatherError(false);
+    } else {
+      console.error("Weather fetch error:", res.error || res.data?.message || 'unknown_error');
+      setWeatherError(true);
+      if (!isFallback) {
+        await fallbackWeather();
+      }
+    }
+    setWeatherLoading(false);
+  };
+
+  const normalizeExternalUrl = (url) => {
+    if (!url) return '#';
+    if (/^https?:\/\//i.test(url)) return url;
+    return `https://${url}`;
+  };
+
+  const sendChatMessage = async (message, options = {}) => {
+    const userMsg = message.trim();
+    if (!userMsg || isLoading) return;
+    if (!token) {
+      onRequireAuth('Please login to chat with AI assistant.');
+      return;
+    }
+
+    const { autoSpeakResponse = false } = options;
+    voiceResponseEnabledRef.current = autoSpeakResponse;
     setChatHistory(prev => [...prev, { role: 'user', content: userMsg }]);
     setChatMessage('');
     setIsLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/chat`, {
+      const res = await requestWithTimeout(`${API_BASE}/chat`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ message: userMsg, language })
       });
 
-      // Handle cases where the backend (Render) returns a 502/503 HTML error page during deployment or sleep
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Server is restarting or deploying updates. Please wait a moment and try again.");
+      const data = res.data || {};
+      if (res.status === 401) {
+        onRequireAuth('Your session expired. Please login again.');
+        return;
       }
-
-      const data = await res.json();
-      if (res.status === 401) { onRequireAuth(); return; }
       if (res.status === 503 && data.setupGuide) {
         const botResponse = `⚠️ ${data.response || data.message}\n\nSetup Guide: ${data.setupGuide}`;
         setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
         return;
       }
-      
+
+      if (!res.ok) {
+        const fallbackMessage = res.error === 'timeout'
+          ? '⏳ Server took too long to respond. Please try again.'
+          : (data.message || 'Sorry, something went wrong.');
+        setChatHistory(prev => [...prev, { role: 'bot', content: `❌ ${fallbackMessage}` }]);
+        return;
+      }
+
       const botResponse = data.response || data.message || 'Sorry, something went wrong.';
       setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
+
+      if (autoSpeakResponse && voiceResponseEnabledRef.current && isChatOpenRef.current) {
+        speakText(botResponse);
+      }
     } catch (err) {
       console.error("Chat error:", err);
-      // Give a contextual warning if the server is starting
-      const isRestarting = err.message.includes('restarting') || err.message.includes('Unexpected token');
-      const errorMsg = isRestarting 
-        ? '⏳ The AI server is currently restarting or deploying updates. Please wait about 30 seconds and ask again.' 
-        : '❌ Could not connect to the server. Please ensure your internet is stable and the backend is running.';
-      setChatHistory(prev => [...prev, { role: 'bot', content: errorMsg }]);
-    } finally { setIsLoading(false); }
+      setChatHistory(prev => [...prev, { role: 'bot', content: '❌ Could not connect to the server. Please ensure your internet is stable and the backend is running.' }]);
+    } finally {
+      voiceResponseEnabledRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
+  // Chat
+  const handleChatSubmit = async (e) => {
+    e?.preventDefault();
+    await sendChatMessage(chatMessage);
   };
 
   // Voice
   const toggleVoice = () => {
-    if (!user) { onRequireAuth(); return; }
+    if (!user) { onRequireAuth('Please login to use voice assistant.'); return; }
     if (!recognitionRef.current) { alert('Voice input is not supported in your browser. Please use Chrome.'); return; }
     if (isListening) {
+      voiceResponseEnabledRef.current = false;
       recognitionRef.current.stop();
       setIsListening(false);
     } else {
+      stopSpeaking();
       // Update language
       const langCodes = { english: 'en-IN', hindi: 'hi-IN', punjabi: 'pa-IN' };
       recognitionRef.current.lang = langCodes[language] || 'en-IN';
@@ -411,7 +569,15 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const startVoiceChat = () => {
     requireAuth(() => {
       setIsChatOpen(true);
-      setTimeout(() => toggleVoice(), 500);
+      if (voiceStartTimeoutRef.current) {
+        clearTimeout(voiceStartTimeoutRef.current);
+      }
+      voiceStartTimeoutRef.current = setTimeout(() => {
+        voiceStartTimeoutRef.current = null;
+        if (isChatOpenRef.current) {
+          toggleVoice();
+        }
+      }, 500);
     });
   };
 
@@ -422,11 +588,19 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     const formData = new FormData();
     formData.append('soilImage', file);
     try {
-      const res = await fetch(`${API_BASE}/analyze-soil`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
-      const data = await res.json();
-      if (res.status === 401) { onRequireAuth(); return; }
+      const res = await requestWithTimeout(`${API_BASE}/analyze-soil`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+      const data = res.data || {};
+      if (res.status === 401) { onRequireAuth('Please login to use soil analysis.'); return; }
       if (res.status === 503 && data.setupGuide) {
         setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
+      if (!res.ok) {
+        if (res.error === 'timeout') {
+          setAnalysisResult('⏳ Soil analysis timed out. Please try again with a smaller image.');
+          return;
+        }
+        setAnalysisResult(`❌ ${data.message || 'Analysis failed.'}`);
         return;
       }
       const result = data.crops || data.message || 'Analysis failed.';
@@ -445,11 +619,19 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     const formData = new FormData();
     formData.append('plantImage', file);
     try {
-      const res = await fetch(`${API_BASE}/analyze-plant`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
-      const data = await res.json();
-      if (res.status === 401) { onRequireAuth(); return; }
+      const res = await requestWithTimeout(`${API_BASE}/analyze-plant`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
+      const data = res.data || {};
+      if (res.status === 401) { onRequireAuth('Please login to use disease detection.'); return; }
       if (res.status === 503 && data.setupGuide) {
         setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
+      if (!res.ok) {
+        if (res.error === 'timeout') {
+          setAnalysisResult('⏳ Plant analysis timed out. Please try again with a smaller image.');
+          return;
+        }
+        setAnalysisResult(`❌ ${data.message || 'Analysis failed.'}`);
         return;
       }
       const result = data.health || data.message || 'Analysis failed.';
@@ -465,11 +647,19 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const handleCropAdvice = async () => {
     setAnalysisLoading(true); setCropAdviceResult('');
     try {
-      const res = await fetch(`${API_BASE}/crop-advice`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ...cropForm, language }) });
-      const data = await res.json();
-      if (res.status === 401) { onRequireAuth(); return; }
+      const res = await requestWithTimeout(`${API_BASE}/crop-advice`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ...cropForm, language }) });
+      const data = res.data || {};
+      if (res.status === 401) { onRequireAuth('Please login to use crop advisory.'); return; }
       if (res.status === 503 && data.setupGuide) {
         setCropAdviceResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
+      if (!res.ok) {
+        if (res.error === 'timeout') {
+          setCropAdviceResult('⏳ Crop advisory timed out. Please try again.');
+          return;
+        }
+        setCropAdviceResult(`❌ ${data.message || 'No advice.'}`);
         return;
       }
       const advice = data.advice || data.message || 'No advice.';
@@ -485,11 +675,19 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const handleFinancialGuidance = async () => {
     setAnalysisLoading(true); setFinancialResult('');
     try {
-      const res = await fetch(`${API_BASE}/financial-guidance`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ topic: financialTopic, language }) });
-      const data = await res.json();
-      if (res.status === 401) { onRequireAuth(); return; }
+      const res = await requestWithTimeout(`${API_BASE}/financial-guidance`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ topic: financialTopic, language }) });
+      const data = res.data || {};
+      if (res.status === 401) { onRequireAuth('Please login to use financial guidance.'); return; }
       if (res.status === 503 && data.setupGuide) {
         setFinancialResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
+        return;
+      }
+      if (!res.ok) {
+        if (res.error === 'timeout') {
+          setFinancialResult('⏳ Financial guidance timed out. Please try again.');
+          return;
+        }
+        setFinancialResult(`❌ ${data.message || 'No guidance.'}`);
         return;
       }
       const guidance = data.guidance || data.message || 'No guidance.';
@@ -625,12 +823,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                   </button>
                 </div>
               ) : (
-                <a
-                  href="/auth"
+                <Link
+                  to="/auth"
+                  state={{ from: '/', reason: 'Please login to continue.' }}
                   className="bg-white text-green-700 px-5 py-2 rounded-full text-sm font-bold hover:bg-gray-100 shadow-md transition-all transform hover:scale-105 active:scale-95"
                 >
                   Login / Sign Up
-                </a>
+                </Link>
               )}
             </div>
             <div className="md:hidden flex items-center">
@@ -655,7 +854,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
               {user ? (
                 <button onClick={onLogout} className="block w-full text-left px-3 py-2 text-red-300 hover:bg-green-700 mt-2">Logout ({user.name})</button>
               ) : (
-                <a href="/auth" className="block w-full text-left px-3 py-2 text-orange-300 hover:bg-green-700 mt-2 font-medium">Login / Sign Up</a>
+                <Link to="/auth" state={{ from: '/', reason: 'Please login to continue.' }} className="block w-full text-left px-3 py-2 text-orange-300 hover:bg-green-700 mt-2 font-medium">Login / Sign Up</Link>
               )}
             </div>
           </div>
@@ -681,7 +880,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
               </div>
               {!user && (
                 <p className="mt-4 text-sm text-gray-500 bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-2 inline-block">
-                  ⚠️ {content.loginRequired} → <a href="/auth" className="text-green-700 font-semibold underline">Login / Sign Up</a>
+                  ⚠️ {content.loginRequired} → <Link to="/auth" state={{ from: '/', reason: content.loginRequired }} className="text-green-700 font-semibold underline">Login / Sign Up</Link>
                 </p>
               )}
             </div>
@@ -704,7 +903,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                 </div>
               ) : !weatherError ? (
                 <div className="bg-white rounded-2xl shadow-xl p-12 text-center border">
-                  {locationStatus === 'prompt' ? (
+                  {locationStatus === 'prompt' && !locationPromptClosed ? (
                     <div>
                       <MapPin className="h-12 w-12 text-green-500 mx-auto mb-4" />
                       <p className="text-gray-600 mb-4">Allow access to your location for accurate weather</p>
@@ -717,7 +916,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                       </button>
                     </div>
                   ) : (
-                    <div><div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div><p className="text-gray-500">{content.weather.loading}</p></div>
+                    <div>
+                      {weatherLoading && <div className="animate-spin h-8 w-8 border-4 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div>}
+                      <p className="text-gray-500">{weatherLoading ? content.weather.loading : 'Using default location weather data.'}</p>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -772,7 +974,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                 </div>
               ) : (
                 <div className="bg-white bg-opacity-10 rounded-xl p-12 text-center">
-                  {locationStatus === 'prompt' ? (
+                  {locationStatus === 'prompt' && !locationPromptClosed ? (
                     <div>
                       <MapPin className="h-12 w-12 text-white mx-auto mb-4" />
                       <p className="text-green-200 mb-4">Allow access to your location for accurate weather</p>
@@ -785,7 +987,9 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                       </button>
                     </div>
                   ) : (
-                    <p className="text-green-200">{weatherError ? content.weather.error : content.weather.loading}</p>
+                    <p className="text-green-200">
+                      {weatherError ? content.weather.error : (weatherLoading ? content.weather.loading : 'Using default location weather data.')}
+                    </p>
                   )}
                 </div>
               )}
@@ -798,9 +1002,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
                   <div key={i} className="bg-white bg-opacity-10 rounded-lg p-3 hover:bg-opacity-20 transition-colors">
                     <p className="font-bold text-sm">{s.name}</p>
                     <p className="text-xs text-green-200 mt-1">{s.benefits}</p>
-                    {s.link && <a href={s.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-orange-300 hover:text-orange-200 mt-1"><ExternalLink className="h-3 w-3" />Visit</a>}
+                    {s.link && <a href={normalizeExternalUrl(s.link)} rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-orange-300 hover:text-orange-200 mt-1"><ExternalLink className="h-3 w-3" />Visit</a>}
                   </div>
-                )) : <p className="text-green-200 text-center py-8">Loading schemes...</p>}
+                )) : (
+                  <p className="text-green-200 text-center py-8">
+                    {schemesLoading ? 'Loading schemes...' : (schemesError || 'No schemes available for this location.')}
+                  </p>
+                )}
               </div>
               <button onClick={() => setShowSchemesModal(true)} className="mt-4 bg-orange-500 hover:bg-orange-600 px-6 py-3 rounded-lg font-medium transition-colors">{content.schemes.viewAll}</button>
             </div>
@@ -810,14 +1018,14 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
       {/* ===== CHAT MODAL ===== */}
       {isChatOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50" onClick={(e) => { if (e.target === e.currentTarget) setIsChatOpen(false); }}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50" onClick={(e) => { if (e.target === e.currentTarget) closeChatAssistant(); }}>
           <div className="bg-white w-full sm:max-w-lg sm:h-[600px] h-[85vh] sm:rounded-2xl rounded-t-2xl shadow-2xl flex flex-col overflow-hidden">
             <div className="p-4 bg-green-800 text-white flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <div className="h-8 w-8 bg-white rounded-full flex items-center justify-center text-lg">🌾</div>
                 <div><h3 className="font-bold">AgriSense AI</h3><p className="text-xs text-green-200">{language === 'punjabi' ? 'ਪੰਜਾਬੀ ਵਿੱਚ' : language === 'hindi' ? 'हिंदी में' : 'English'}</p></div>
               </div>
-              <button onClick={() => setIsChatOpen(false)} className="hover:bg-green-700 p-1 rounded"><X className="h-5 w-5" /></button>
+              <button onClick={closeChatAssistant} className="hover:bg-green-700 p-1 rounded"><X className="h-5 w-5" /></button>
             </div>
             <div className="flex-1 p-4 overflow-y-auto bg-gray-50 space-y-3">
               {chatHistory.map((msg, i) => (
@@ -979,7 +1187,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
               <p className="text-xs text-gray-600 mt-1">{s.description}</p>
               <p className="text-xs font-medium text-orange-600 mt-1">{s.benefits}</p>
               {s.states && !s.states.includes('all') && <span className="inline-block mt-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">📍 {s.states.join(', ')}</span>}
-              {s.link && <a href={s.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-900 mt-2 font-medium"><ExternalLink className="h-3 w-3" />Visit Portal</a>}
+              {s.link && <a href={normalizeExternalUrl(s.link)} rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-green-700 hover:text-green-900 mt-2 font-medium"><ExternalLink className="h-3 w-3" />Visit Portal</a>}
             </div>
           ))}
         </div>

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Sprout, Mail, Lock, User, MapPin, Eye, EyeOff } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Mail, Lock, User, MapPin, Eye, EyeOff } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 export default function AuthPage({ onLogin }) {
     const [isLogin, setIsLogin] = useState(true);
@@ -10,8 +11,85 @@ export default function AuthPage({ onLogin }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const navigate = useNavigate();
+    const location = useLocation();
+    const googleButtonRef = useRef(null);
 
     const [form, setForm] = useState({ name: '', email: '', password: '', location: '', language: 'english' });
+
+    const finishLogin = (user, token) => {
+        localStorage.setItem('agrisense_token', token);
+        localStorage.setItem('agrisense_user', JSON.stringify(user));
+        onLogin(user, token);
+        const fallbackPath = '/';
+        const from = location.state?.from;
+        const safeTarget = typeof from === 'string' && from.startsWith('/') ? from : fallbackPath;
+        navigate(safeTarget, { replace: true });
+    };
+
+    useEffect(() => {
+        if (!GOOGLE_CLIENT_ID || !googleButtonRef.current) return;
+
+        const renderGoogleButton = () => {
+            if (!window.google?.accounts?.id || !googleButtonRef.current) return;
+            googleButtonRef.current.innerHTML = '';
+            window.google.accounts.id.initialize({
+                client_id: GOOGLE_CLIENT_ID,
+                callback: async ({ credential }) => {
+                    setError('');
+                    setLoading(true);
+                    try {
+                        const res = await fetch(`${API_BASE}/auth/google`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                credential,
+                                location: form.location,
+                                language: form.language
+                            }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            setError(data.message || 'Google sign-in failed');
+                            return;
+                        }
+                        finishLogin(data.user, data.token);
+                    } catch (err) {
+                        setError('Google sign-in failed. Please try again.');
+                    } finally {
+                        setLoading(false);
+                    }
+                }
+            });
+            window.google.accounts.id.renderButton(googleButtonRef.current, {
+                theme: 'outline',
+                size: 'large',
+                text: isLogin ? 'signin_with' : 'signup_with',
+                shape: 'pill',
+                width: 320
+            });
+        };
+
+        if (window.google?.accounts?.id) {
+            renderGoogleButton();
+            return;
+        }
+
+        const existingScript = document.querySelector('script[data-google-identity="true"]');
+        if (existingScript) {
+            existingScript.addEventListener('load', renderGoogleButton);
+            return () => existingScript.removeEventListener('load', renderGoogleButton);
+        }
+
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        script.dataset.googleIdentity = 'true';
+        script.addEventListener('load', renderGoogleButton);
+        document.body.appendChild(script);
+
+        return () => script.removeEventListener('load', renderGoogleButton);
+    }, [form.language, form.location, isLogin]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -34,10 +112,7 @@ export default function AuthPage({ onLogin }) {
                 return;
             }
 
-            localStorage.setItem('agrisense_token', data.token);
-            localStorage.setItem('agrisense_user', JSON.stringify(data.user));
-            onLogin(data.user, data.token);
-            navigate('/');
+            finishLogin(data.user, data.token);
         } catch (err) {
             setError('Cannot connect to server. Is the backend running?');
         } finally {
@@ -65,6 +140,11 @@ export default function AuthPage({ onLogin }) {
 
                     {error && (
                         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">{error}</div>
+                    )}
+                    {location.state?.reason && (
+                        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl text-sm mb-4">
+                            {location.state.reason}
+                        </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -114,6 +194,22 @@ export default function AuthPage({ onLogin }) {
                             {loading ? 'Please wait...' : isLogin ? 'Login' : 'Create Account'}
                         </button>
                     </form>
+
+                    <div className="my-6 flex items-center gap-3">
+                        <div className="h-px flex-1 bg-gray-200" />
+                        <span className="text-xs font-medium uppercase tracking-wide text-gray-400">or</span>
+                        <div className="h-px flex-1 bg-gray-200" />
+                    </div>
+
+                    {GOOGLE_CLIENT_ID ? (
+                        <div className="flex justify-center">
+                            <div ref={googleButtonRef} />
+                        </div>
+                    ) : (
+                        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-center text-sm text-gray-500">
+                            Google sign-in will appear after `VITE_GOOGLE_CLIENT_ID` is configured.
+                        </div>
+                    )}
                 </div>
 
                 <p className="text-center text-xs text-gray-400 mt-6">&copy; 2025 AgriSense. Built for Indian Farmers.</p>

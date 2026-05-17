@@ -1,7 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import LandingPage from './LandingPage';
 import AuthPage from './AuthPage';
+
+function AppRoutes({ user, token, onLogin, onLogout }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleRequireAuth = (reason = 'Please login to use this feature.') => {
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    navigate('/auth', { state: { from, reason } });
+  };
+
+  return (
+    <Routes>
+      <Route path="/auth" element={
+        user ? <Navigate to="/" replace /> : <AuthPage onLogin={onLogin} />
+      } />
+      <Route path="/*" element={
+        <LandingPage user={user} token={token} onLogout={onLogout} onRequireAuth={handleRequireAuth} />
+      } />
+    </Routes>
+  );
+}
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -44,14 +65,7 @@ export default function App() {
 
   return (
     <Router>
-      <Routes>
-        <Route path="/auth" element={
-          user ? <Navigate to="/" replace /> : <AuthPage onLogin={handleLogin} />
-        } />
-        <Route path="/*" element={
-          <LandingPage user={user} token={token} onLogout={handleLogout} onRequireAuth={() => window.location.href = '/auth'} />
-        } />
-      </Routes>
+      <AppRoutes user={user} token={token} onLogin={handleLogin} onLogout={handleLogout} />
     </Router>
   );
 }
