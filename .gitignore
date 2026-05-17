@@ -31,9 +31,10 @@ ai-models/_pycache_/
 ai-models/*.pyc
 ai-models/venv/
 ai-models/.ipynb_checkpoints/
+backend/chroma_db/
+backend/python-scripts/__pycache__/
 
 # Jupyter Notebook outputs
 **/.ipynb_checkpoints/
 */.ipynb~
 */.checkpoint.ipynb
-

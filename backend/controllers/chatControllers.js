@@ -1,24 +1,185 @@
+const axios = require("axios");
 const Groq = require("groq-sdk");
 const User = require("../models/User");
-const Chat = require("../models/Chat"); // Import the new Chat model
-const { spawn } = require("child_process");
+const Chat = require("../models/Chat");
+const { RAG_SERVICE_URL, ensureRagServiceReady } = require("../services/ragServiceManager");
 
+const CHAT_MODE = (process.env.CHAT_MODE || "hybrid").toLowerCase();
+const RAG_TIMEOUT_MS = Number(process.env.RAG_TIMEOUT_MS || 5000);
 const groqApiKey = process.env.GROQ_API_KEY;
-if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+
+if (!groqApiKey || groqApiKey === "your_groq_api_key_here") {
   console.warn("⚠️  GROQ_API_KEY not configured in chatControllers. Chat feature will not work.");
 }
-const groq = new Groq({ apiKey: groqApiKey });
+
+const groq = groqApiKey && groqApiKey !== "your_groq_api_key_here"
+  ? new Groq({ apiKey: groqApiKey })
+  : null;
+
+const langMap = { english: "English", hindi: "Hindi", punjabi: "Punjabi" };
+
+async function getFarmerProfile(userId) {
+  try {
+    const user = await User.findById(userId).select("-password");
+    if (!user) {
+      return {};
+    }
+
+    return {
+      id: user._id.toString(),
+      name: user.name,
+      location: user.location,
+      crops: user.crops || [],
+      details: user.farmDetails || {},
+      history: user.cropHistory || [],
+    };
+  } catch (error) {
+    console.warn("Profile fetch failed, continuing with empty profile.");
+    return {};
+  }
+}
+
+async function getHistoryContext(userId) {
+  try {
+    let chatSession = await Chat.findOne({ userId });
+    if (!chatSession) {
+      chatSession = await Chat.create({ userId, messages: [] });
+    }
+
+    return chatSession.messages.slice(-10).map((msg) => ({
+      role: msg.role === "assistant" ? "assistant" : "user",
+      content: msg.content,
+    }));
+  } catch (error) {
+    console.error("History Fetch Error:", error);
+    return [];
+  }
+}
+
+async function saveChatMessages(userId, message, answer) {
+  await Chat.findOneAndUpdate(
+    { userId },
+    {
+      $push: { messages: { role: "user", content: message } },
+      $set: { lastUpdated: new Date() },
+    },
+    { upsert: true }
+  );
+
+  await Chat.findOneAndUpdate(
+    { userId },
+    {
+      $push: { messages: { role: "assistant", content: answer } },
+    }
+  );
+}
+
+async function saveToUserMemory(message, answer, farmerProfile) {
+  try {
+    await axios.post(
+      `${RAG_SERVICE_URL}/memory`,
+      { message, answer, farmer_profile: farmerProfile },
+      { timeout: 5000 }
+    );
+  } catch (error) {
+    console.warn("User memory save skipped:", error.message);
+  }
+}
+
+function buildProfileString(farmerProfile) {
+  const cropsStr = (farmerProfile.crops || []).join(", ") || "Not specified";
+  const details = farmerProfile.details || {};
+  const history = (farmerProfile.history || []).map((item) => `${item.cropName} (${item.year})`).join(", ");
+
+  return `
+- Name: ${farmerProfile.name || "Farmer"}
+- Location: ${farmerProfile.location || "India"}
+- Current Crops: ${cropsStr}
+- Land Size: ${details.landSize || "Unknown"}
+- Soil Type: ${details.soilType || "Unknown"}
+- Irrigation: ${details.irrigationSource || "Unknown"}
+- Farming Type: ${details.farmingType || "Conventional"}
+- Crop History: ${history || "None recorded"}
+`.trim();
+}
+
+async function generateHybridAnswer(message, language, farmerProfile, historyContext) {
+  if (!groq) {
+    throw new Error("Groq client is not configured");
+  }
+
+  const targetLang = langMap[language] || "English";
+  const profileString = buildProfileString(farmerProfile);
+
+  const systemPrompt = `You are AgriSense, an expert agricultural AI assistant for Indian farmers.
+You MUST respond ENTIRELY and EXCLUSIVELY in ${targetLang}.
+Even if the user asks a question in English or another language, YOUR OUTPUT MUST BE TRANSLATED TO AND RESPONDED IN ${targetLang}.
+
+USE THE FARMER'S PROFILE DATA TO PERSONALIZE YOUR ADVICE.
+For example, if they have 'Black Soil', recommend crops suitable for that.
+If they rely on 'Rainfed' irrigation, suggest drought-resistant variants.
+
+Your response should look like a professional consultation:
+1. Start with a direct answer.
+2. Use bullet points or numbered lists.
+3. Explain why and how clearly.
+4. Mention specific fertilizers, medicines, or techniques.
+5. Keep the answer practical for Indian farmers.`;
+
+  const userPrompt = `FARMER PROFILE: ${profileString}
+
+QUESTION: ${message}
+
+IMPORTANT RESTRICTION: You MUST answer the above question ENTIRELY in ${targetLang}, regardless of what language the question was asked in.
+
+ANSWER IN ${targetLang.toUpperCase()}:`;
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...historyContext,
+    { role: "user", content: userPrompt },
+  ];
+
+  const completion = await groq.chat.completions.create({
+    messages,
+    model: "llama-3.3-70b-versatile",
+    temperature: 0.7,
+    max_tokens: 1024,
+  });
+
+  return completion.choices[0].message.content;
+}
+
+async function generatePureRagAnswer(message, language, farmerProfile, historyContext) {
+  await ensureRagServiceReady();
+
+  const response = await axios.post(
+    `${RAG_SERVICE_URL}/chat`,
+    {
+      message,
+      language,
+      farmer_profile: farmerProfile,
+      history_context: historyContext,
+      timeout_ms: RAG_TIMEOUT_MS,
+    },
+    {
+      timeout: Math.max(RAG_TIMEOUT_MS + 15000, 20000),
+    }
+  );
+
+  return response.data;
+}
 
 exports.handleChat = async (req, res) => {
   try {
-    if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
+    if (!groqApiKey || groqApiKey === "your_groq_api_key_here") {
       return res.status(503).json({
         message: "Chat service is not configured. Please add GROQ_API_KEY to backend .env file",
         setupGuide: "Get your API key from: https://console.groq.com/keys",
-        response: "Chat service is not available. Please contact the administrator."
+        response: "Chat service is not available. Please contact the administrator.",
       });
     }
-    
+
     const { message, language = "english" } = req.body;
     const userId = req.userId;
 
@@ -26,148 +187,54 @@ exports.handleChat = async (req, res) => {
       return res.status(400).json({ message: "Message is required" });
     }
 
-    // 1. Get Farmer Profile
-    let farmer_profile = {};
-    try {
-      const user = await User.findById(userId).select("-password");
-      if (user) {
-        farmer_profile = {
-          id: user._id.toString(),
-          name: user.name,
-          location: user.location,
-          crops: user.crops || [],
-          // NEW: Detailed profile
-          details: user.farmDetails || {},
-          history: user.cropHistory || []
-        };
-      }
-    } catch (err) {
-      console.warn("Profile fetch failed, continuing with empty profile.");
-    }
+    const farmerProfile = await getFarmerProfile(userId);
+    const historyContext = await getHistoryContext(userId);
+    const isPureRagMode = CHAT_MODE === "pure_rag";
 
-    // 2. FETCH HISTORY (The "Memory")
-    let history_context = [];
-    try {
-      let chatSession = await Chat.findOne({ userId });
-      if (!chatSession) {
-        chatSession = await Chat.create({ userId, messages: [] });
-      }
+    let answer = "";
+    let source = isPureRagMode ? "rag" : "hybrid";
+    let contextsUsed = 0;
+    let retrievalMs = 0;
+    let timedOut = false;
 
-      // Get last 5 exchanges (10 messages) for context window
-      const recentMessages = chatSession.messages.slice(-10);
-      history_context = recentMessages.map(msg => ({
-        role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: msg.content
-      }));
-    } catch (error) {
-      console.error("History Fetch Error:", error);
-    }
-
-    // 3. FAST: Call Groq directly
-    const lang_map = { english: "English", hindi: "Hindi", punjabi: "Punjabi" };
-    const target_lang = lang_map[language] || "English";
-
-    // Format profile string
-    const crops_str = (farmer_profile.crops || []).join(', ') || "Not specified";
-    const details = farmer_profile.details || {};
-    const history = (farmer_profile.history || []).map(h => `${h.cropName} (${h.year})`).join(', ');
-
-    const profile_str = `
-    - Name: ${farmer_profile.name || 'Farmer'}
-    - Location: ${farmer_profile.location || 'India'}
-    - Current Crops: ${crops_str}
-    - Land Size: ${details.landSize || 'Unknown'}
-    - Soil Type: ${details.soilType || 'Unknown'}
-    - Irrigation: ${details.irrigationSource || 'Unknown'}
-    - Farming Type: ${details.farmingType || 'Conventional'}
-    - Crop History: ${history || 'None recorded'}
-    `.trim();
-
-    const system_prompt = `You are AgriSense, an expert agricultural AI assistant for Indian farmers. 
-    You MUST respond ENTIRELY and EXCLUSIVELY in ${target_lang}. 
-    Even if the user asks a question in English or another language, YOUR OUTPUT MUST BE TRANSLATED TO AND RESPONDED IN ${target_lang}.
-    
-    USE THE FARMER'S PROFILE DATA TO PERSONALIZE YOUR ADVICE.
-    For example, if they have 'Black Soil', recommend crops suitable for that.
-    If they rely on 'Rainfed' irrigation, suggest drought-resistant variants.
-    
-    Your response should look like a professional consultation:
-    1. Start with a direct answer.
-    2. Use BULLET POINTS or numbered lists.
-    3. Explain 'Why' and 'How' clearly.
-    4. Mention specific fertilizers, medicines, or techniques.
-    5. Be encouraging.
-    
-    Do NOT be concise. Give the farmer full dominance over the topic.`;
-
-    const user_prompt = `FARMER PROFILE: ${profile_str}\n\nQUESTION: ${message}\n\nIMPORTANT RESTRICTION: You MUST answer the above question ENTIRELY in ${target_lang}, regardless of what language the question was asked in.\n\nANSWER IN ${target_lang.toUpperCase()}:`;
-
-    try {
-      // Construct message array with history
-      const messages = [
-        { role: "system", content: system_prompt },
-        ...history_context, // Inject past conversation
-        { role: "user", content: user_prompt }
-      ];
-
-      const completion = await groq.chat.completions.create({
-        messages: messages,
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.7,
-        max_tokens: 1024
-      });
-
-      const answer = completion.choices[0].message.content;
-
-      // 4. SAVE TO MEMORY (MongoDB)
-      // Save User Message
-      await Chat.findOneAndUpdate(
-        { userId },
-        {
-          $push: { messages: { role: 'user', content: message } },
-          $set: { lastUpdated: new Date() }
-        },
-        { upsert: true }
-      );
-
-      // Save Bot Answer
-      await Chat.findOneAndUpdate(
-        { userId },
-        {
-          $push: { messages: { role: 'assistant', content: answer } }
-        }
-      );
-
-      // 5. BACKGROUND RAG (Optional - still useful for vector search later)
-      // Never block primary chat response on this side-effect.
+    if (isPureRagMode) {
       try {
-        const pythonInput = JSON.stringify({ message, answer, farmer_profile });
-        const ragProcess = spawn("python", ["python-scripts/save_to_rag.py", pythonInput], {
-          detached: true,
-          stdio: 'ignore'
-        });
-        ragProcess.on("error", (spawnError) => {
-          console.warn("RAG background save skipped:", spawnError.message);
-        });
-        ragProcess.unref();
-      } catch (spawnError) {
-        console.warn("RAG background save skipped:", spawnError.message);
+        const ragResult = await generatePureRagAnswer(message, language, farmerProfile, historyContext);
+
+        if (ragResult?.timed_out) {
+          timedOut = true;
+          source = "timeout_llm";
+          answer = await generateHybridAnswer(message, language, farmerProfile, historyContext);
+        } else {
+          answer = ragResult?.response || "";
+          contextsUsed = ragResult?.contexts_used || 0;
+          retrievalMs = ragResult?.retrieval_ms || 0;
+          source = "rag";
+        }
+      } catch (error) {
+        console.warn("Pure RAG path failed, falling back to direct LLM:", error.message);
+        timedOut = true;
+        source = "timeout_llm";
+        answer = await generateHybridAnswer(message, language, farmerProfile, historyContext);
       }
-
-      res.json({
-        response: answer,
-        contexts_used: 0,
-        audio: null
-      });
-
-    } catch (apiError) {
-      console.error("Groq API Error:", apiError.message);
-      res.status(503).json({
-        message: "AI service temporarily unavailable",
-        response: "I'm having a technical issue. Please try again."
-      });
+    } else {
+      answer = await generateHybridAnswer(message, language, farmerProfile, historyContext);
     }
 
+    await saveChatMessages(userId, message, answer);
+
+    if (isPureRagMode) {
+      saveToUserMemory(message, answer, farmerProfile);
+    }
+
+    res.json({
+      response: answer,
+      contexts_used: contextsUsed,
+      source,
+      retrieval_ms: retrievalMs,
+      timed_out: timedOut,
+      audio: null,
+    });
   } catch (error) {
     console.error("Chat Controller Error:", error);
     res.status(500).json({ message: "Internal server error" });

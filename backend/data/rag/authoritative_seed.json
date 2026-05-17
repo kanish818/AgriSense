@@ -1,0 +1,178 @@
+[
+  {
+    "id": "auth-wheat-rabi-north",
+    "title": "Wheat sowing guidance for North India",
+    "content": "For wheat in North India during rabi, timely sowing from late October to mid-November usually gives better yield. Use certified seed, maintain line sowing, avoid over-irrigation at the crown root initiation stage, and follow soil-test-based fertilizer use. Delayed sowing increases heat stress risk during grain filling.",
+    "source": "curated_authoritative_seed",
+    "topic": "crop_management",
+    "crop": "wheat",
+    "season": "rabi",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-rice-kharif-general",
+    "title": "Rice kharif crop management basics",
+    "content": "For kharif paddy, healthy nursery raising, timely transplanting, proper spacing, weed control in the first 30 days, and balanced nitrogen use are critical. Standing water should be managed carefully because continuous flooding wastes water and can reduce root vigor.",
+    "source": "curated_authoritative_seed",
+    "topic": "crop_management",
+    "crop": "rice",
+    "season": "kharif",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-cotton-pink-bollworm",
+    "title": "Cotton pink bollworm management",
+    "content": "For pink bollworm in cotton, avoid late sowing, remove and destroy infested bolls, use pheromone traps for monitoring, follow refuge practice where applicable, and rotate insecticides with different modes of action. Do not spray repeatedly without confirming pest pressure because resistance risk is high.",
+    "source": "curated_authoritative_seed",
+    "topic": "pest_management",
+    "crop": "cotton",
+    "season": "kharif",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-rice-blast",
+    "title": "Rice blast disease management",
+    "content": "Rice blast risk increases with susceptible varieties, dense canopy, excess nitrogen, and prolonged leaf wetness. Use resistant varieties where available, keep nitrogen balanced, improve field aeration, and apply recommended fungicide only after confirming symptoms and local advisory guidance.",
+    "source": "curated_authoritative_seed",
+    "topic": "disease_management",
+    "crop": "rice",
+    "season": "kharif",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-wheat-yellow-rust",
+    "title": "Wheat yellow rust response",
+    "content": "Yellow rust in wheat appears as yellow stripes of pustules on leaves. Early reporting and timely fungicide use are important. Avoid delay once confirmed, and prefer resistant varieties in rust-prone areas. Monitor cool and humid conditions closely because rust spreads quickly then.",
+    "source": "curated_authoritative_seed",
+    "topic": "disease_management",
+    "crop": "wheat",
+    "season": "rabi",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-soil-test-fertilizer",
+    "title": "Soil-test-based fertilizer recommendation",
+    "content": "Fertilizer decisions should follow a soil test whenever possible. Applying nitrogen, phosphorus, potash, sulfur, or micronutrients without testing can waste money and harm soil health. Split nitrogen applications reduce loss and improve use efficiency in many field crops.",
+    "source": "curated_authoritative_seed",
+    "topic": "soil_fertility",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-drip-irrigation-benefits",
+    "title": "Drip irrigation benefits",
+    "content": "Drip irrigation can improve water-use efficiency by delivering water near the root zone and reducing evaporation loss. It is especially useful where water is limited or energy costs are high. Filtration and regular maintenance are necessary to prevent clogging.",
+    "source": "curated_authoritative_seed",
+    "topic": "irrigation",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-millets-rainfed",
+    "title": "Millets for drought-prone rainfed farming",
+    "content": "In drought-prone rainfed areas, millets such as bajra and jowar can be more resilient than water-intensive crops. Variety choice, timely sowing with rainfall onset, moisture conservation, and weed control in the early stage are important for stable yield.",
+    "source": "curated_authoritative_seed",
+    "topic": "crop_selection",
+    "crop": "millets",
+    "season": "kharif",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-pmkisan",
+    "title": "PM-KISAN summary",
+    "content": "PM-KISAN provides income support to eligible farmer families through direct benefit transfer in installments, subject to current government rules. Farmers should ensure Aadhaar linkage, correct bank details, and land record compliance to avoid payment issues.",
+    "source": "curated_authoritative_seed",
+    "topic": "government_scheme",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-pmfby",
+    "title": "PMFBY summary",
+    "content": "Pradhan Mantri Fasal Bima Yojana supports crop insurance for notified crops and areas, subject to scheme rules and enrollment timelines. Farmers should check local notifications, premium sharing, reporting deadlines for loss, and whether their crop and village are covered.",
+    "source": "curated_authoritative_seed",
+    "topic": "government_scheme",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-soil-health-card",
+    "title": "Soil Health Card use",
+    "content": "A Soil Health Card can guide fertilizer and soil amendment decisions by showing nutrient status and basic soil parameters. Farmers should use it to avoid blanket fertilizer application and to correct deficiencies such as zinc, sulfur, or boron where recommended.",
+    "source": "curated_authoritative_seed",
+    "topic": "soil_fertility",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-pmkusum",
+    "title": "PM-KUSUM overview",
+    "content": "PM-KUSUM supports solar-based energy solutions for agriculture under approved components and state implementation. Farmers should verify local eligibility, subsidy structure, feeder or pump category, and application windows through their state nodal agency.",
+    "source": "curated_authoritative_seed",
+    "topic": "government_scheme",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-potato-late-blight",
+    "title": "Potato late blight precautions",
+    "content": "Late blight in potato spreads quickly under cool, humid, cloudy conditions. Farmers should scout regularly, improve airflow, avoid unnecessary leaf wetness, and follow local fungicide advisories quickly after first confirmed symptoms.",
+    "source": "curated_authoritative_seed",
+    "topic": "disease_management",
+    "crop": "potato",
+    "season": "rabi",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-mustard-aphid",
+    "title": "Mustard aphid management basics",
+    "content": "Aphid outbreaks in mustard reduce vigor and seed yield. Early scouting, avoiding excess nitrogen, conserving beneficial insects, and timely control after threshold crossing help manage the pest. Blanket insecticide spraying should be avoided.",
+    "source": "curated_authoritative_seed",
+    "topic": "pest_management",
+    "crop": "mustard",
+    "season": "rabi",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-black-soil-crops",
+    "title": "Black soil suitability",
+    "content": "Black soils generally retain moisture well and can suit crops such as cotton, soybean, sorghum, chickpea, and some wheat systems, depending on rainfall and drainage. Waterlogging management is important because heavy black soils can become sticky and poorly aerated when saturated.",
+    "source": "curated_authoritative_seed",
+    "topic": "crop_selection",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  },
+  {
+    "id": "auth-ipm-general",
+    "title": "Integrated pest management basics",
+    "content": "Integrated pest management relies on regular scouting, correct pest identification, economic threshold awareness, biological control support, and selective pesticide use only when needed. Repeated spraying without diagnosis increases cost and resistance risk.",
+    "source": "curated_authoritative_seed",
+    "topic": "pest_management",
+    "crop": "general",
+    "season": "all",
+    "language": "english",
+    "verified": true
+  }
+]

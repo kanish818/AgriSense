@@ -9,7 +9,7 @@ router.get("/", async (req, res) => {
             return res.status(400).json({ message: "Latitude and Longitude required" });
         }
 
-        const apiKey = process.env.WEATHERAPI_KEY || '22cfa637441144c5ba8181352262703';
+        const apiKey = process.env.WEATHERAPI_KEY;
         if (!apiKey) {
             console.error("WEATHERAPI_KEY is not configured");
             return res.status(503).json({ 

@@ -1,8 +1,8 @@
 const express = require("express");
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const multer = require("multer");
 const cors = require("cors");
-const path = require("path");
 const fs = require("fs");
 const Groq = require("groq-sdk");
 const mongoose = require("mongoose");
@@ -12,33 +12,46 @@ const authRoutes = require("./routes/auth");
 const chatRoutes = require("./routes/chat");
 const weatherRoutes = require("./routes/weather");
 const schemesRoutes = require("./routes/schemes");
+const adminRoutes = require("./routes/admin");
 
 const app = express();
+const configuredOrigins = process.env.FRONTEND_ORIGINS
+  ? process.env.FRONTEND_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : [];
+const allowedOrigins = configuredOrigins.length > 0 ? configuredOrigins : [
+  "https://agri-sense-lime.vercel.app",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:3000",
+  "http://localhost:4173",
+];
+
 app.use(cors({
   origin: function(origin, callback) {
-    const allowedOrigins = [
-      'https://agri-sense-lime.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:4173'
-    ];
     // Allow requests with no origin (e.g., mobile apps, curl, Render health checks)
     if (!origin) return callback(null, true);
-    // Allow any Vercel preview deployment
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(null, true); // Allow all for now during development
+    return callback(new Error("CORS origin not allowed"));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.use((error, req, res, next) => {
+  if (error && error.message === "CORS origin not allowed") {
+    return res.status(403).json({ message: "Origin not allowed by CORS policy" });
+  }
+  return next(error);
+});
+
 app.use(express.json());
 
 // Public routes
 app.use("/api/auth", authRoutes);
 app.use("/api/weather", weatherRoutes);
 app.use("/api/schemes", schemesRoutes);
+app.use("/api/admin", adminRoutes);
 
 // TTS Proxy Route (Fixes browser blocks for Google Cloud TTS)
 const axios = require("axios");
@@ -59,7 +72,6 @@ app.get("/api/tts", async (req, res) => {
     });
 
     res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Access-Control-Allow-Origin", "*");
     response.data.pipe(res);
   } catch (error) {
     console.error("TTS Proxy Error:", error.message);
@@ -104,7 +116,9 @@ if (!groqApiKey || groqApiKey === 'your_groq_api_key_here') {
   console.warn("⚠️  GROQ_API_KEY is not configured. AI features (soil analysis, plant disease detection, chat) will not work.");
   console.warn("   Get your API key from: https://console.groq.com/keys");
 }
-const groq = new Groq({ apiKey: groqApiKey });
+const groq = groqApiKey && groqApiKey !== 'your_groq_api_key_here'
+  ? new Groq({ apiKey: groqApiKey })
+  : null;
 
 // POST /api/analyze-soil (Protected)
 app.post("/api/analyze-soil", verifyToken, upload.single("soilImage"), async (req, res) => {
