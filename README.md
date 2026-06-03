@@ -85,7 +85,9 @@ Important variables:
 - `MONGODB_URI`
 - `JWT_SECRET`
 - `GROQ_API_KEY`
+- `TOMORROW_API_KEY`
 - `WEATHERAPI_KEY`
+- `OPENWEATHERMAP_KEY`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLOUD_VISION_KEY`
 - `FRONTEND_ORIGINS`
@@ -94,7 +96,7 @@ Important variables:
 
 Notes:
 
-- Weather now supports a no-key Open-Meteo fallback when `WEATHERAPI_KEY` is missing.
+- Weather now prefers `TOMORROW_API_KEY`, then falls back through `WEATHERAPI_KEY`, `OPENWEATHERMAP_KEY`, Open-Meteo, `met.no`, and `wttr.in`.
 - AI chat, soil analysis, plant analysis, crop advice, and financial guidance still require a valid `GROQ_API_KEY`.
 - If `CHAT_MODE=pure_rag`, the backend can auto-start the Python RAG service when needed.
 
@@ -172,6 +174,7 @@ Issues found during verification:
 
 - Frontend lint currently fails with existing ESLint and prop-types issues.
 - Deployed backend weather was failing because `WEATHERAPI_KEY` was not configured in production.
+- The voice assistant could silently fail when the browser had not granted microphone access before speech recognition started.
 - The repo had no root `README.md`.
 
 ## Deployment Notes
@@ -199,18 +202,20 @@ The main failure modes in this project are operational, not just code bugs:
 1. Frontend builds can point to the wrong backend if `VITE_API_URL` is left on a local URL or overridden incorrectly.
 2. Protected features depend on a valid JWT token; if the token expires but the UI still thinks the user is logged in, feature requests fail with `401`.
 3. Weather depended on a third-party key-based API, so missing quota, missing key, or rate limiting could blank the weather card.
-4. AI features depend on external APIs and can fail if provider credentials are missing, exhausted, or rate-limited.
-5. Render free or low-traffic services can cold-start or lag behind Vercel deploy timing.
+4. Browser speech recognition can fail without a visible error if microphone permission is blocked or if `start()` is called before the browser has granted access.
+5. AI features depend on external APIs and can fail if provider credentials are missing, exhausted, or rate-limited.
+6. Render free or low-traffic services can cold-start or lag behind Vercel deploy timing.
 
 ## Precautions To Prevent Future Breakage
 
 1. Keep a working `VITE_API_URL` in Vercel environment settings and verify it after each deploy.
-2. Keep `GROQ_API_KEY`, `WEATHERAPI_KEY`, `GOOGLE_CLIENT_ID`, `MONGODB_URI`, and `JWT_SECRET` configured in Render.
+2. Keep `GROQ_API_KEY`, `TOMORROW_API_KEY`, `WEATHERAPI_KEY`, `OPENWEATHERMAP_KEY`, `GOOGLE_CLIENT_ID`, `MONGODB_URI`, and `JWT_SECRET` configured in Render.
 3. Use an uptime monitor on both the frontend home page and backend health endpoint.
 4. After every push, verify `auth`, `weather`, `chat`, and one upload-based endpoint from production.
-5. Avoid relying on only one external weather provider; keep a fallback, which this repo now does.
-6. Expire bad sessions cleanly by forcing logout on `401` responses instead of silently bouncing users around the app.
-7. Keep deploy-time environment variables documented and versioned in `.env.example`, but never commit real secrets.
+5. Avoid relying on only one external weather provider; keep a keyed primary provider and multi-provider fallbacks, which this repo now does.
+6. Test microphone permission and one spoken query after each frontend deploy, especially on Chrome mobile and desktop.
+7. Expire bad sessions cleanly by forcing logout on `401` responses instead of silently bouncing users around the app.
+8. Keep deploy-time environment variables documented and versioned in `.env.example`, but never commit real secrets.
 
 ## Known Gaps
 

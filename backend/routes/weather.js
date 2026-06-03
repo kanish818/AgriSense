@@ -2,6 +2,10 @@ const express = require("express");
 const axios = require("axios");
 const router = express.Router();
 
+function formatLatLonName(lat, lon) {
+    return `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`;
+}
+
 function mapWeatherCodeToDescription(code) {
     const codeMap = {
         0: "Clear sky",
@@ -37,6 +41,36 @@ function mapWeatherCodeToDescription(code) {
     return codeMap[code] || "Weather unavailable";
 }
 
+function mapTomorrowWeatherCodeToDescription(code) {
+    const codeMap = {
+        1000: "Clear",
+        1001: "Cloudy",
+        1100: "Mostly clear",
+        1101: "Partly cloudy",
+        1102: "Mostly cloudy",
+        2000: "Fog",
+        2100: "Light fog",
+        4000: "Drizzle",
+        4001: "Rain",
+        4200: "Light rain",
+        4201: "Heavy rain",
+        5000: "Snow",
+        5001: "Flurries",
+        5100: "Light snow",
+        5101: "Heavy snow",
+        6000: "Freezing drizzle",
+        6001: "Freezing rain",
+        6200: "Light freezing rain",
+        6201: "Heavy freezing rain",
+        7000: "Ice pellets",
+        7101: "Heavy ice pellets",
+        7102: "Light ice pellets",
+        8000: "Thunderstorm"
+    };
+
+    return codeMap[code] || "Weather unavailable";
+}
+
 function formatMetNoDescription(symbolCode) {
     if (!symbolCode) return "Weather unavailable";
     return symbolCode
@@ -60,7 +94,7 @@ async function fetchOpenMeteoWeather(lat, lon) {
     const place = geoResponse.data?.results?.[0];
     const placeName = place?.name
         ? [place.name, place.admin1, place.country].filter(Boolean).join(", ")
-        : `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`;
+        : formatLatLonName(lat, lon);
 
     return {
         main: {
@@ -122,7 +156,7 @@ async function fetchMetNoWeather(lat, lon) {
                 )
             }
         ],
-        name: `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`,
+        name: formatLatLonName(lat, lon),
         wind: {
             speed: Number(details.wind_speed)
         },
@@ -164,11 +198,76 @@ async function fetchWttrWeather(lat, lon) {
                 description: current.weatherDesc?.[0]?.value || "Weather unavailable"
             }
         ],
-        name: [areaName, region, country].filter(Boolean).join(", ") || `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`,
+        name: [areaName, region, country].filter(Boolean).join(", ") || formatLatLonName(lat, lon),
         wind: {
             speed: Number(current.windspeedKmph) / 3.6
         },
         source: "wttr"
+    };
+}
+
+async function fetchTomorrowWeather(lat, lon) {
+    const apiKey = process.env.TOMORROW_API_KEY;
+    if (!apiKey) {
+        throw new Error("TOMORROW_API_KEY is not configured");
+    }
+
+    const params = {
+        location: `${lat},${lon}`,
+        units: "metric",
+        apikey: apiKey
+    };
+
+    const [realtimeResponse, forecastResponse] = await Promise.all([
+        axios.get("https://api.tomorrow.io/v4/weather/realtime", {
+            params,
+            timeout: 10000,
+            headers: {
+                Accept: "application/json",
+                "Accept-Encoding": "gzip, deflate, br"
+            }
+        }),
+        axios.get("https://api.tomorrow.io/v4/weather/forecast", {
+            params: {
+                ...params,
+                timesteps: "1d"
+            },
+            timeout: 10000,
+            headers: {
+                Accept: "application/json",
+                "Accept-Encoding": "gzip, deflate, br"
+            }
+        })
+    ]);
+
+    const current = realtimeResponse.data?.data?.values;
+    const today = forecastResponse.data?.timelines?.daily?.[0]?.values;
+    const location = realtimeResponse.data?.location || forecastResponse.data?.location;
+
+    if (!current) {
+        throw new Error("Tomorrow.io response missing weather fields");
+    }
+
+    return {
+        main: {
+            temp: Number(current.temperature),
+            humidity: Number(current.humidity),
+            feels_like: Number(current.temperatureApparent ?? current.temperature),
+            temp_min: Number(today?.temperatureMin ?? current.temperature),
+            temp_max: Number(today?.temperatureMax ?? current.temperature)
+        },
+        weather: [
+            {
+                description: mapTomorrowWeatherCodeToDescription(
+                    Number(current.weatherCode ?? today?.weatherCodeMax ?? today?.weatherCodeMin)
+                )
+            }
+        ],
+        name: location?.name || formatLatLonName(lat, lon),
+        wind: {
+            speed: Number(current.windSpeed ?? 0)
+        },
+        source: "tomorrow.io"
     };
 }
 
@@ -212,18 +311,22 @@ router.get("/", async (req, res) => {
             return res.status(400).json({ message: "Latitude and Longitude required" });
         }
 
-        const apiKey = process.env.WEATHERAPI_KEY;
-        if (!apiKey) {
-            const fallbackData = await fetchOpenMeteoWeather(lat, lon);
-            return res.json(fallbackData);
+        try {
+            const tomorrowData = await fetchTomorrowWeather(lat, lon);
+            return res.json(tomorrowData);
+        } catch (tomorrowError) {
+            console.error("Tomorrow.io provider error:", tomorrowError.message);
         }
 
-        const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lon}&days=1`;
-        try {
-            const response = await axios.get(url, { timeout: 10000 });
-            return res.json(transformWeatherApiResponse(response.data));
-        } catch (weatherApiError) {
-            console.error("WeatherAPI provider error:", weatherApiError.message);
+        const weatherApiKey = process.env.WEATHERAPI_KEY;
+        if (weatherApiKey) {
+            const url = `https://api.weatherapi.com/v1/forecast.json?key=${weatherApiKey}&q=${lat},${lon}&days=1`;
+            try {
+                const response = await axios.get(url, { timeout: 10000 });
+                return res.json(transformWeatherApiResponse(response.data));
+            } catch (weatherApiError) {
+                console.error("WeatherAPI provider error:", weatherApiError.message);
+            }
         }
 
         try {

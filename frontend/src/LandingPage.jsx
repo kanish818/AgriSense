@@ -5,6 +5,31 @@ import { API_BASE } from './config/api';
 
 const DEFAULT_WEATHER_COORDS = { lat: 28.61, lon: 77.2 };
 const API_TIMEOUT_MS = 20000;
+const RECOGNITION_LANG_CODES = { english: 'en-IN', hindi: 'hi-IN', punjabi: 'pa-IN' };
+
+function getRecognitionLanguage(language) {
+  return RECOGNITION_LANG_CODES[language] || 'en-IN';
+}
+
+function getVoiceErrorMessage(errorCode, language) {
+  switch (errorCode) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return 'Microphone permission was blocked. Allow mic access in your browser and try again.';
+    case 'audio-capture':
+      return 'No working microphone was detected. Check your device input and browser permissions.';
+    case 'language-not-supported':
+      return `Speech recognition for ${language} is not supported in this browser. Try Chrome on desktop or Android.`;
+    case 'network':
+      return 'Speech recognition could not reach the browser speech service. Check your internet connection and try again.';
+    case 'no-speech':
+      return 'No speech was detected. Try speaking a little louder and closer to the mic.';
+    case 'aborted':
+      return '';
+    default:
+      return 'Voice input could not start. Refresh the page and check microphone permissions.';
+  }
+}
 
 export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Core
@@ -31,12 +56,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Voice
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceError, setVoiceError] = useState('');
   const recognitionRef = useRef(null);
   const synthRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const voiceResponseEnabledRef = useRef(false);
   const speechSessionRef = useRef(0);
-  const voiceStartTimeoutRef = useRef(null);
+  const voiceAbortRequestedRef = useRef(false);
 
   // Modals
   const [showSoilModal, setShowSoilModal] = useState(false);
@@ -167,6 +193,26 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     'Authorization': `Bearer ${token}`
   });
 
+  const appendVoiceNotice = (message) => {
+    if (!message) return;
+    setChatHistory((prev) => {
+      const lastMessage = prev[prev.length - 1];
+      if (lastMessage?.role === 'bot' && lastMessage.content === message) {
+        return prev;
+      }
+      return [...prev, { role: 'bot', content: message }];
+    });
+  };
+
+  const ensureMicrophoneAccess = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => track.stop());
+  };
+
   // Request location permission manually
   const requestLocationPermission = () => {
     setIsRequestingLocation(true);
@@ -283,21 +329,44 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       const recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
-      const langCodes = { english: 'en-IN', hindi: 'hi-IN', punjabi: 'pa-IN' };
-      recognition.lang = langCodes[language] || 'en-IN';
+      recognition.maxAlternatives = 1;
+      recognition.lang = getRecognitionLanguage(language);
+      recognition.onstart = () => {
+        voiceAbortRequestedRef.current = false;
+        setVoiceError('');
+        setIsListening(true);
+      };
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
+        const transcript = Array.from(event.results || [])
+          .map((result) => result?.[0]?.transcript || '')
+          .join(' ')
+          .trim();
         setIsListening(false);
         if (transcript?.trim()) {
           sendChatMessage(transcript.trim(), { autoSpeakResponse: true });
         }
       };
-      recognition.onerror = () => {
+      recognition.onerror = (event) => {
+        const errorCode = event?.error || 'unknown';
+        const message = getVoiceErrorMessage(errorCode, language);
         voiceResponseEnabledRef.current = false;
+        if (!(errorCode === 'aborted' && voiceAbortRequestedRef.current)) {
+          setVoiceError(message);
+          if (message) {
+            appendVoiceNotice(`🎤 ${message}`);
+          }
+        }
+        voiceAbortRequestedRef.current = false;
         setIsListening(false);
       };
-      recognition.onend = () => setIsListening(false);
+      recognition.onend = () => {
+        voiceAbortRequestedRef.current = false;
+        setIsListening(false);
+      };
       recognitionRef.current = recognition;
+    } else {
+      recognitionRef.current = null;
+      setVoiceError('Voice input is not supported in this browser. Use Chrome on desktop or Android.');
     }
   }, [language]);
 
@@ -438,6 +507,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
   const stopListening = () => {
     try {
+      voiceAbortRequestedRef.current = true;
       recognitionRef.current?.abort?.();
     } catch (error) {
       console.error('Voice recognition abort error:', error);
@@ -447,10 +517,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
   const closeChatAssistant = () => {
     voiceResponseEnabledRef.current = false;
-    if (voiceStartTimeoutRef.current) {
-      clearTimeout(voiceStartTimeoutRef.current);
-      voiceStartTimeoutRef.current = null;
-    }
+    setVoiceError('');
     stopListening();
     stopSpeaking();
     setIsChatOpen(false);
@@ -459,10 +526,6 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   useEffect(() => {
     return () => {
       voiceResponseEnabledRef.current = false;
-      if (voiceStartTimeoutRef.current) {
-        clearTimeout(voiceStartTimeoutRef.current);
-        voiceStartTimeoutRef.current = null;
-      }
       stopListening();
       stopSpeaking();
     };
@@ -552,20 +615,32 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   };
 
   // Voice
-  const toggleVoice = () => {
+  const toggleVoice = async () => {
     if (!user) { onRequireAuth('Please login to use voice assistant.'); return; }
     if (!recognitionRef.current) { alert('Voice input is not supported in your browser. Please use Chrome.'); return; }
     if (isListening) {
       voiceResponseEnabledRef.current = false;
-      recognitionRef.current.stop();
-      setIsListening(false);
+      stopListening();
     } else {
       stopSpeaking();
-      // Update language
-      const langCodes = { english: 'en-IN', hindi: 'hi-IN', punjabi: 'pa-IN' };
-      recognitionRef.current.lang = langCodes[language] || 'en-IN';
-      recognitionRef.current.start();
-      setIsListening(true);
+      setVoiceError('');
+      recognitionRef.current.lang = getRecognitionLanguage(language);
+      try {
+        await ensureMicrophoneAccess();
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error('Voice recognition start error:', error);
+        voiceResponseEnabledRef.current = false;
+        const errorCode = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError'
+          ? 'not-allowed'
+          : error?.name === 'InvalidStateError'
+            ? 'unknown'
+            : 'audio-capture';
+        const message = getVoiceErrorMessage(errorCode, language);
+        setVoiceError(message);
+        appendVoiceNotice(`🎤 ${message}`);
+        setIsListening(false);
+      }
     }
   };
 
@@ -573,15 +648,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const startVoiceChat = () => {
     requireAuth(() => {
       setIsChatOpen(true);
-      if (voiceStartTimeoutRef.current) {
-        clearTimeout(voiceStartTimeoutRef.current);
-      }
-      voiceStartTimeoutRef.current = setTimeout(() => {
-        voiceStartTimeoutRef.current = null;
-        if (isChatOpenRef.current) {
-          toggleVoice();
-        }
-      }, 500);
+      void toggleVoice();
     });
   };
 
@@ -1055,19 +1122,28 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
               )}
               <div ref={chatEndRef} />
             </div>
-            <form onSubmit={handleChatSubmit} className="p-3 border-t bg-white flex gap-2">
-              <button type="button" onClick={toggleVoice} className={`p-3 rounded-xl transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-              </button>
-              <button type="button" onClick={isSpeaking ? stopSpeaking : null} className={`p-3 rounded-xl transition-colors ${isSpeaking ? 'bg-blue-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500'}`} title={isSpeaking ? 'Stop speaking' : 'Voice output enabled'}>
-                {isSpeaking ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-              </button>
-              <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)}
-                placeholder={language === 'punjabi' ? 'ਫ਼ਸਲ, ਮੌਸਮ ਬਾਰੇ ਪੁੱਛੋ...' : language === 'hindi' ? 'फसल, मौसम के बारे में पूछें...' : 'Ask about crops, weather, soil...'}
-                className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-              <button type="submit" disabled={isLoading || !chatMessage.trim()} className="bg-green-800 hover:bg-green-900 disabled:bg-gray-300 p-3 rounded-xl text-white transition-colors">
-                <Send className="h-5 w-5" />
-              </button>
+            <form onSubmit={handleChatSubmit} className="p-3 border-t bg-white">
+              <div className="flex gap-2">
+                <button type="button" onClick={toggleVoice} className={`p-3 rounded-xl transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`} title={isListening ? 'Stop listening' : 'Start voice input'}>
+                  {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </button>
+                <button type="button" onClick={isSpeaking ? stopSpeaking : null} className={`p-3 rounded-xl transition-colors ${isSpeaking ? 'bg-blue-500 text-white animate-pulse' : 'bg-gray-100 text-gray-500'}`} title={isSpeaking ? 'Stop speaking' : 'Voice output enabled'}>
+                  {isSpeaking ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                </button>
+                <input type="text" value={chatMessage} onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder={language === 'punjabi' ? 'ਫ਼ਸਲ, ਮੌਸਮ ਬਾਰੇ ਪੁੱਛੋ...' : language === 'hindi' ? 'फसल, मौसम के बारे में पूछें...' : 'Ask about crops, weather, soil...'}
+                  className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                <button type="submit" disabled={isLoading || !chatMessage.trim()} className="bg-green-800 hover:bg-green-900 disabled:bg-gray-300 p-3 rounded-xl text-white transition-colors">
+                  <Send className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="min-h-[1.25rem] pt-2 text-xs">
+                {isListening ? (
+                  <p className="text-green-600">Listening in {language}...</p>
+                ) : voiceError ? (
+                  <p className="text-red-500">{voiceError}</p>
+                ) : null}
+              </div>
             </form>
           </div>
         </div>
