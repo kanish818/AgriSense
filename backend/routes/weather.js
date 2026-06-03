@@ -73,6 +73,48 @@ async function fetchOpenMeteoWeather(lat, lon) {
     };
 }
 
+async function fetchWttrWeather(lat, lon) {
+    const url = `https://wttr.in/${lat},${lon}?format=j1`;
+    const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+            "User-Agent": "AgriSense/1.0"
+        }
+    });
+
+    const current = response.data?.current_condition?.[0];
+    const today = response.data?.weather?.[0];
+    const area = response.data?.nearest_area?.[0];
+
+    if (!current || !today) {
+        throw new Error("wttr.in response missing weather fields");
+    }
+
+    const areaName = area?.areaName?.[0]?.value;
+    const region = area?.region?.[0]?.value;
+    const country = area?.country?.[0]?.value;
+
+    return {
+        main: {
+            temp: Number(current.temp_C),
+            humidity: Number(current.humidity),
+            feels_like: Number(current.FeelsLikeC),
+            temp_min: Number(today.mintempC),
+            temp_max: Number(today.maxtempC)
+        },
+        weather: [
+            {
+                description: current.weatherDesc?.[0]?.value || "Weather unavailable"
+            }
+        ],
+        name: [areaName, region, country].filter(Boolean).join(", ") || `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`,
+        wind: {
+            speed: Number(current.windspeedKmph) / 3.6
+        },
+        source: "wttr"
+    };
+}
+
 function transformWeatherApiResponse(data) {
     return {
         main: {
@@ -113,12 +155,25 @@ router.get("/", async (req, res) => {
             const response = await axios.get(url, { timeout: 10000 });
             return res.json(transformWeatherApiResponse(response.data));
         } catch (weatherApiError) {
-            console.error("Weather API Error:", weatherApiError.message);
+            console.error("WeatherAPI provider error:", weatherApiError.message);
+        }
+
+        try {
             const fallbackData = await fetchOpenMeteoWeather(lat, lon);
             return res.json(fallbackData);
+        } catch (openMeteoError) {
+            console.error("Open-Meteo provider error:", openMeteoError.message);
+        }
+
+        try {
+            const fallbackData = await fetchWttrWeather(lat, lon);
+            return res.json(fallbackData);
+        } catch (wttrError) {
+            console.error("wttr.in provider error:", wttrError.message);
+            throw wttrError;
         }
     } catch (error) {
-        console.error("Weather API Error:", error.message);
+        console.error("Weather route failed:", error.message);
         res.status(500).json({ message: "Failed to fetch weather data: " + error.message });
     }
 });

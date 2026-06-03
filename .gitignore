@@ -38,3 +38,5 @@ backend/python-scripts/__pycache__/
 **/.ipynb_checkpoints/
 */.ipynb~
 */.checkpoint.ipynb
+
+.vercel
