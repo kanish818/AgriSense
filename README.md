@@ -1,14 +1,54 @@
-# AgriSense
+<div align="center">
 
-AgriSense is a full-stack smart farming assistant for Indian farmers. It combines a React frontend with a Node/Express backend to provide:
+# AgriSense 🌾
 
-- AI chat assistance in English, Hindi, and Punjabi
-- Plant disease detection from uploaded images
-- Soil image analysis with crop suggestions
-- Crop advisory and financial guidance
-- Government scheme discovery
-- Location-based weather updates
-- Farmer profile, farm details, and crop history management
+### Smart farming assistant for Indian farmers
+
+[![Frontend](https://img.shields.io/badge/Frontend-Vercel-000000?style=for-the-badge&logo=vercel)](https://agri-sense-lime.vercel.app)
+[![Backend](https://img.shields.io/badge/Backend-Render-46E3B7?style=for-the-badge&logo=render&logoColor=000000)](https://agrisense-backend-h3a6.onrender.com)
+[![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Node%20%7C%20MongoDB-2F855A?style=for-the-badge)](#tech-stack)
+[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20RAG%20%7C%20Vision-D97706?style=for-the-badge)](#key-features)
+
+</div>
+
+AgriSense is a full-stack AI farming platform built for Indian agriculture workflows. It combines a multilingual React frontend with a Node/Express backend to help farmers get fast, practical assistance on crops, weather, disease detection, soil health, finance, and government schemes.
+
+## ✨ Highlights
+
+- 🤖 AI chat assistance in English, Hindi, and Punjabi
+- 🎙️ Voice-first chat with microphone recording, transcription, and spoken responses
+- 🌤️ Live location-based weather with provider failover
+- 🌿 Plant disease detection from uploaded images
+- 🪴 Soil image analysis with crop suggestions
+- 📈 Crop advisory and financial guidance
+- 🏛️ Government scheme discovery
+- 🚜 Farmer profile, farm details, and crop history management
+
+## 🧭 Project Snapshot
+
+| Area | Details |
+| --- | --- |
+| Frontend | React 19, Vite, Tailwind CSS, React Router |
+| Backend | Node.js, Express, Mongoose, Multer |
+| AI Services | Groq LLMs, Whisper transcription, optional Python RAG service |
+| Languages | English, Hindi, Punjabi |
+| Deployments | Vercel frontend, Render backend |
+| Public Frontend | [agri-sense-lime.vercel.app](https://agri-sense-lime.vercel.app) |
+| Public Backend | [agrisense-backend-h3a6.onrender.com](https://agrisense-backend-h3a6.onrender.com) |
+
+## 🗂️ Table of Contents
+
+- [Repo Structure](#repo-structure)
+- [Tech Stack](#tech-stack)
+- [Key Features](#key-features)
+- [Environment Setup](#environment-setup)
+- [Local Development](#local-development)
+- [Verification Status](#verification-status)
+- [Deployment Notes](#deployment-notes)
+- [Why Issues Like This Happen](#why-issues-like-this-happen)
+- [Precautions To Prevent Future Breakage](#precautions-to-prevent-future-breakage)
+- [Known Gaps](#known-gaps)
+- [Suggested Next Checks](#suggested-next-checks)
 
 ## Repo Structure
 
@@ -43,13 +83,21 @@ AgriSense is a full-stack smart farming assistant for Indian farmers. It combine
 
 ## Key Features
 
+### Core Experience
+
+- Multilingual landing page and AI assistant
+- Login/signup with local auth and Google sign-in
+- Voice input with backend transcription and voice output playback
+- Location-aware weather and scheme discovery
+- Farm profile capture for more personalized recommendations
+
 ### Frontend
 
 - Login/signup with local auth and Google sign-in
 - Multilingual UI and chat flow
-- Weather card with location prompt
+- Voice-enabled chat with microphone recording and TTS playback
+- Weather card with location prompt and fallback weather providers
 - Scheme discovery with state filtering
-- Chat assistant with voice input/output
 - Soil and plant analysis upload flows
 - Crop advisory and financial guidance modals
 - Farm profile and crop history management
@@ -66,6 +114,7 @@ AgriSense is a full-stack smart farming assistant for Indian farmers. It combine
 - `GET /api/weather`
 - `GET /api/schemes`
 - `POST /api/chat`
+- `GET /api/tts`
 - `POST /api/analyze-soil`
 - `POST /api/analyze-plant`
 - `POST /api/crop-advice`
@@ -153,6 +202,13 @@ http://localhost:5173
 ```
 
 ### 4. Optional RAG setup
+
+## 🚀 What Makes This Repo Useful
+
+- It supports text, image, and voice-based farmer interactions in one product.
+- It is designed for Indian agriculture use cases instead of generic chatbot behavior.
+- It has layered fallback behavior for weather, auth recovery, and voice playback.
+- It is deployable as separate frontend and backend services with clear health-check targets.
 
 See [backend/RAG_SETUP.md](/C:/Projects2/FarmSaathi/FarmSaathi-main/backend/RAG_SETUP.md).
 

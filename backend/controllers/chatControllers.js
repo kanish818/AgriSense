@@ -19,6 +19,19 @@ const groq = groqApiKey && groqApiKey !== "your_groq_api_key_here"
 
 const langMap = { english: "English", hindi: "Hindi", punjabi: "Punjabi" };
 const speechLangCodeMap = { english: "en", hindi: "hi", punjabi: "pa" };
+const GENERIC_VOICE_TRANSCRIPTS = new Set([
+  "thank you",
+  "thank you.",
+  "thanks",
+  "thanks.",
+  "thankyou",
+  "okay",
+  "ok",
+  "bye",
+  "bye.",
+  "hello",
+  "hello.",
+]);
 
 async function getFarmerProfile(userId) {
   try {
@@ -212,6 +225,27 @@ async function cleanupUploadedFile(filePath) {
   }
 }
 
+function isLikelyHallucinatedVoiceTranscript(text, metadata = {}) {
+  const normalized = String(text || "").trim().toLowerCase();
+  if (!normalized) return true;
+
+  const speechDetected = String(metadata.speechDetected || "").toLowerCase() === "true";
+  const speechFrames = Number(metadata.speechFrames || 0);
+  const maxAudioLevel = Number(metadata.maxAudioLevel || 0);
+
+  if (!speechDetected && speechFrames < 3 && maxAudioLevel < 0.05) {
+    return true;
+  }
+
+  if (GENERIC_VOICE_TRANSCRIPTS.has(normalized)) {
+    if (!speechDetected || speechFrames < 6 || maxAudioLevel < 0.08) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 exports.handleChat = async (req, res) => {
   let uploadedFilePath = req.file?.path;
   try {
@@ -231,6 +265,13 @@ exports.handleChat = async (req, res) => {
     if (!message && req.file) {
       transcript = await transcribeAudioUpload(req.file, language);
       message = transcript;
+
+      if (isLikelyHallucinatedVoiceTranscript(transcript, req.body)) {
+        return res.status(422).json({
+          message: "I could not clearly understand the voice input. Please speak closer to the microphone and try again.",
+          transcript,
+        });
+      }
     }
 
     if (!message) {

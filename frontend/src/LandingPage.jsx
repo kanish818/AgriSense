@@ -64,6 +64,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const audioChunksRef = useRef([]);
   const recordTimeoutRef = useRef(null);
   const skipNextRecordingRef = useRef(false);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const levelIntervalRef = useRef(null);
+  const voiceMetricsRef = useRef({ maxLevel: 0, speechFrames: 0, startedAt: 0 });
   const synthRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const voiceResponseEnabledRef = useRef(false);
@@ -231,6 +235,58 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
+  };
+
+  const stopVoiceMeter = async () => {
+    if (levelIntervalRef.current) {
+      clearInterval(levelIntervalRef.current);
+      levelIntervalRef.current = null;
+    }
+    analyserRef.current = null;
+    if (audioContextRef.current) {
+      try {
+        await audioContextRef.current.close();
+      } catch (error) {
+        console.error('Audio context cleanup error:', error);
+      }
+      audioContextRef.current = null;
+    }
+  };
+
+  const startVoiceMeter = async (stream) => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    voiceMetricsRef.current = { maxLevel: 0, speechFrames: 0, startedAt: Date.now() };
+
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const audioContext = new AudioContextClass();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.fftSize);
+    audioContextRef.current = audioContext;
+    analyserRef.current = analyser;
+
+    levelIntervalRef.current = setInterval(() => {
+      if (!analyserRef.current) return;
+      analyserRef.current.getByteTimeDomainData(dataArray);
+      let sumSquares = 0;
+      for (let i = 0; i < dataArray.length; i += 1) {
+        const centered = (dataArray[i] - 128) / 128;
+        sumSquares += centered * centered;
+      }
+      const rms = Math.sqrt(sumSquares / dataArray.length);
+      voiceMetricsRef.current.maxLevel = Math.max(voiceMetricsRef.current.maxLevel, rms);
+      if (rms > 0.035) {
+        voiceMetricsRef.current.speechFrames += 1;
+      }
+    }, 150);
   };
 
   // Request location permission manually
@@ -530,6 +586,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const stopListening = () => {
     clearRecordTimeout();
     setVoiceStatus('');
+    void stopVoiceMeter();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       skipNextRecordingRef.current = true;
       mediaRecorderRef.current.stop();
@@ -654,6 +711,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     const extension = audioBlob.type.includes('mp4') ? 'm4a' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
     formData.append('audio', audioBlob, `voice-input.${extension}`);
     formData.append('language', language);
+    formData.append('speechDetected', String(voiceMetricsRef.current.speechFrames >= 6 && voiceMetricsRef.current.maxLevel >= 0.035));
+    formData.append('speechFrames', String(voiceMetricsRef.current.speechFrames));
+    formData.append('maxAudioLevel', String(voiceMetricsRef.current.maxLevel));
+    formData.append('voiceDurationMs', String(Math.max(0, Date.now() - (voiceMetricsRef.current.startedAt || Date.now()))));
 
     setVoiceStatus('Processing your voice message...');
     setIsLoading(true);
@@ -679,9 +740,11 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         return;
       }
       if (!res.ok) {
-        const fallbackMessage = res.error === 'timeout'
-          ? '⏳ Voice processing took too long. Please try a shorter query.'
-          : (data.message || 'Voice processing failed.');
+        const fallbackMessage = res.status === 422
+          ? (data.message || 'I could not clearly understand the voice input. Please try again.')
+          : res.error === 'timeout'
+            ? '⏳ Voice processing took too long. Please try a shorter query.'
+            : (data.message || 'Voice processing failed.');
         setVoiceError(fallbackMessage);
         setChatHistory(prev => [...prev, { role: 'bot', content: `❌ ${fallbackMessage}` }]);
         return;
@@ -747,6 +810,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
           const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
           audioChunksRef.current = [];
           skipNextRecordingRef.current = false;
+          await startVoiceMeter(stream);
 
           recorder.onstart = () => {
             setIsListening(true);
@@ -765,20 +829,31 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
             setVoiceStatus('');
             setIsListening(false);
             clearRecordTimeout();
+            void stopVoiceMeter();
             stopMediaTracks();
           };
           recorder.onstop = async () => {
             const shouldSkip = skipNextRecordingRef.current;
             const recordedMimeType = recorder.mimeType || mimeType || 'audio/webm';
             const audioBlob = new Blob(audioChunksRef.current, { type: recordedMimeType });
+            const voiceMetrics = { ...voiceMetricsRef.current };
             audioChunksRef.current = [];
             mediaRecorderRef.current = null;
             clearRecordTimeout();
+            await stopVoiceMeter();
             stopMediaTracks();
             setIsListening(false);
 
             if (shouldSkip) {
               skipNextRecordingRef.current = false;
+              setVoiceStatus('');
+              return;
+            }
+
+            if (voiceMetrics.speechFrames < 6 || voiceMetrics.maxLevel < 0.035) {
+              const message = 'I could not clearly hear your question. Please speak louder and closer to the microphone, then try again.';
+              setVoiceError(message);
+              appendVoiceNotice(`🎤 ${message}`);
               setVoiceStatus('');
               return;
             }
