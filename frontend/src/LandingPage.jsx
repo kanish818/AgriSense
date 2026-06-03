@@ -127,7 +127,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     }
   };
 
-  const fallbackWeather = () => fetchWeather(DEFAULT_WEATHER_COORDS.lat, DEFAULT_WEATHER_COORDS.lon, true);
+  const fallbackWeather = () => fetchWeather(DEFAULT_WEATHER_COORDS.lat, DEFAULT_WEATHER_COORDS.lon, true, 0);
 
   // Fetch Profile
   const fetchProfile = async () => {
@@ -293,6 +293,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const requestLocationPermission = () => {
     setIsRequestingLocation(true);
     setLocationPromptClosed(true);
+    setWeatherError(false);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -333,7 +334,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
           // User previously denied, use default location (New Delhi)
           setWeatherError(false);
           setLocationPromptClosed(true);
-          fallbackWeather();
+          fetchWeather(DEFAULT_WEATHER_COORDS.lat, DEFAULT_WEATHER_COORDS.lon, true, 0);
         }
         // If 'prompt', do nothing — user must click the "Share My Location" button
       }).catch(() => {
@@ -618,19 +619,42 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     };
   }, []);
 
-  const fetchWeather = async (lat, lon, isFallback) => {
+  const fetchWeather = async (lat, lon, isFallback, retryCount = 0) => {
     setWeatherLoading(true);
-    const res = await requestWithTimeout(`${API_BASE}/weather?lat=${lat}&lon=${lon}`, {}, 12000);
+    setWeatherError(false);
+    const res = await requestWithTimeout(`${API_BASE}/weather?lat=${lat}&lon=${lon}`, {}, 15000);
     if (res.ok && res.data?.main) {
       setWeather(res.data);
       setWeatherError(false);
-    } else {
-      console.error("Weather fetch error:", res.error || res.data?.message || 'unknown_error');
-      setWeatherError(true);
-      if (!isFallback) {
-        await fallbackWeather();
+      setWeatherLoading(false);
+      return;
+    }
+
+    console.error("Weather fetch error:", res.error || res.data?.message || 'unknown_error');
+
+    // Auto-retry once after 6 seconds to handle Render cold-start
+    if (!isFallback && retryCount < 1) {
+      setWeatherLoading(false);
+      setTimeout(() => fetchWeather(lat, lon, false, retryCount + 1), 6000);
+      return;
+    }
+
+    // If primary coords failed, try default Delhi coords
+    if (!isFallback) {
+      const fallbackRes = await requestWithTimeout(
+        `${API_BASE}/weather?lat=${DEFAULT_WEATHER_COORDS.lat}&lon=${DEFAULT_WEATHER_COORDS.lon}`,
+        {},
+        15000
+      );
+      if (fallbackRes.ok && fallbackRes.data?.main) {
+        setWeather(fallbackRes.data);
+        setWeatherError(false);
+        setWeatherLoading(false);
+        return;
       }
     }
+
+    setWeatherError(true);
     setWeatherLoading(false);
   };
 
