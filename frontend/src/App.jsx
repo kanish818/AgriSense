@@ -7,8 +7,11 @@ function AppRoutes({ user, token, onLogin, onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleRequireAuth = (reason = 'Please login to use this feature.') => {
+  const handleRequireAuth = (reason = 'Please login to use this feature.', options = {}) => {
     const from = `${location.pathname}${location.search}${location.hash}`;
+    if (options.forceLogout) {
+      onLogout();
+    }
     navigate('/auth', { state: { from, reason } });
   };
 
@@ -34,8 +37,13 @@ export default function App() {
     const savedToken = localStorage.getItem('agrisense_token');
     const savedUser = localStorage.getItem('agrisense_user');
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      try {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
+      } catch {
+        localStorage.removeItem('agrisense_token');
+        localStorage.removeItem('agrisense_user');
+      }
     }
     setLoading(false);
   }, []);

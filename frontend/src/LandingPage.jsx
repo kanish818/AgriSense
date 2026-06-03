@@ -99,6 +99,10 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     try {
       const res = await requestWithTimeout(`${API_BASE}/auth/me`, { headers: authHeaders() });
       const data = res.data || {};
+      if (res.status === 401) {
+        onRequireAuth('Your session expired. Please login again.', { forceLogout: true });
+        return;
+      }
       if (res.ok && data.user) {
         setProfileData({
           farmDetails: data.user.farmDetails || {},
@@ -122,7 +126,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       if (res.ok) {
         alert('✅ Farm Profile Updated!');
       } else if (res.status === 401) {
-        onRequireAuth('Your session expired. Please login again.');
+        onRequireAuth('Your session expired. Please login again.', { forceLogout: true });
       } else {
         alert(`❌ ${res.data?.message || 'Update failed'}`);
       }
@@ -142,7 +146,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
         setProfileData(prev => ({ ...prev, cropHistory: data.history }));
         setNewCropHistory({ cropName: '', season: '', year: new Date().getFullYear(), yield: '', notes: '' });
       } else if (res.status === 401) {
-        onRequireAuth('Your session expired. Please login again.');
+        onRequireAuth('Your session expired. Please login again.', { forceLogout: true });
       }
     } catch (e) { alert('❌ Failed to add history'); }
   };
@@ -509,7 +513,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
 
       const data = res.data || {};
       if (res.status === 401) {
-        onRequireAuth('Your session expired. Please login again.');
+        onRequireAuth('Your session expired. Please login again.', { forceLogout: true });
         return;
       }
       if (res.status === 503 && data.setupGuide) {
@@ -590,7 +594,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     try {
       const res = await requestWithTimeout(`${API_BASE}/analyze-soil`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
       const data = res.data || {};
-      if (res.status === 401) { onRequireAuth('Please login to use soil analysis.'); return; }
+      if (res.status === 401) { onRequireAuth('Your session expired. Please login again.', { forceLogout: true }); return; }
       if (res.status === 503 && data.setupGuide) {
         setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
         return;
@@ -621,7 +625,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     try {
       const res = await requestWithTimeout(`${API_BASE}/analyze-plant`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
       const data = res.data || {};
-      if (res.status === 401) { onRequireAuth('Please login to use disease detection.'); return; }
+      if (res.status === 401) { onRequireAuth('Your session expired. Please login again.', { forceLogout: true }); return; }
       if (res.status === 503 && data.setupGuide) {
         setAnalysisResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
         return;
@@ -649,7 +653,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     try {
       const res = await requestWithTimeout(`${API_BASE}/crop-advice`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ ...cropForm, language }) });
       const data = res.data || {};
-      if (res.status === 401) { onRequireAuth('Please login to use crop advisory.'); return; }
+      if (res.status === 401) { onRequireAuth('Your session expired. Please login again.', { forceLogout: true }); return; }
       if (res.status === 503 && data.setupGuide) {
         setCropAdviceResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
         return;
@@ -677,7 +681,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     try {
       const res = await requestWithTimeout(`${API_BASE}/financial-guidance`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ topic: financialTopic, language }) });
       const data = res.data || {};
-      if (res.status === 401) { onRequireAuth('Please login to use financial guidance.'); return; }
+      if (res.status === 401) { onRequireAuth('Your session expired. Please login again.', { forceLogout: true }); return; }
       if (res.status === 503 && data.setupGuide) {
         setFinancialResult(`⚠️ ${data.message}\n\nSetup Guide: ${data.setupGuide}`);
         return;

@@ -73,6 +73,28 @@ async function fetchOpenMeteoWeather(lat, lon) {
     };
 }
 
+function transformWeatherApiResponse(data) {
+    return {
+        main: {
+            temp: data.current.temp_c,
+            humidity: data.current.humidity,
+            feels_like: data.current.feelslike_c,
+            temp_min: data.forecast.forecastday[0].day.mintemp_c,
+            temp_max: data.forecast.forecastday[0].day.maxtemp_c
+        },
+        weather: [
+            {
+                description: data.current.condition.text
+            }
+        ],
+        name: data.location.name,
+        wind: {
+            speed: data.current.wind_kph / 3.6
+        },
+        source: "weatherapi"
+    };
+}
+
 router.get("/", async (req, res) => {
     try {
         const { lat, lon } = req.query;
@@ -87,42 +109,16 @@ router.get("/", async (req, res) => {
         }
 
         const url = `https://api.weatherapi.com/v1/forecast.json?key=${apiKey}&q=${lat},${lon}&days=1`;
-
-        const response = await axios.get(url);
-        const data = response.data;
-
-        // Transform data to match existing OpenWeatherMap structure for frontend compatibility
-        const transformedData = {
-            main: {
-                temp: data.current.temp_c,
-                humidity: data.current.humidity,
-                feels_like: data.current.feelslike_c,
-                temp_min: data.forecast.forecastday[0].day.mintemp_c,
-                temp_max: data.forecast.forecastday[0].day.maxtemp_c
-            },
-            weather: [
-                {
-                    description: data.current.condition.text
-                }
-            ],
-            name: data.location.name,
-            wind: {
-                speed: data.current.wind_kph / 3.6 // Convert kph to m/s
-            },
-            source: "weatherapi"
-        };
-
-        res.json(transformedData);
+        try {
+            const response = await axios.get(url, { timeout: 10000 });
+            return res.json(transformWeatherApiResponse(response.data));
+        } catch (weatherApiError) {
+            console.error("Weather API Error:", weatherApiError.message);
+            const fallbackData = await fetchOpenMeteoWeather(lat, lon);
+            return res.json(fallbackData);
+        }
     } catch (error) {
         console.error("Weather API Error:", error.message);
-        if (error.response?.status === 401 || error.response?.status === 403) {
-            try {
-                const fallbackData = await fetchOpenMeteoWeather(req.query.lat, req.query.lon);
-                return res.json(fallbackData);
-            } catch (fallbackError) {
-                console.error("Open-Meteo fallback failed:", fallbackError.message);
-            }
-        }
         res.status(500).json({ message: "Failed to fetch weather data: " + error.message });
     }
 });

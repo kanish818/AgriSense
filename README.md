@@ -184,7 +184,33 @@ Current backend used by the deployed frontend:
 
 - `https://agrisense-backend-h3a6.onrender.com/api`
 
+Recommended uptime monitor targets:
+
+- Frontend home: `https://agri-sense-lime.vercel.app`
+- Backend health: `https://agrisense-backend-h3a6.onrender.com/api/health`
+- Backend root: `https://agrisense-backend-h3a6.onrender.com`
+
 If Vercel and Render are connected to GitHub auto-deploy, pushing to `main` should trigger a redeploy.
+
+## Why Issues Like This Happen
+
+The main failure modes in this project are operational, not just code bugs:
+
+1. Frontend builds can point to the wrong backend if `VITE_API_URL` is left on a local URL or overridden incorrectly.
+2. Protected features depend on a valid JWT token; if the token expires but the UI still thinks the user is logged in, feature requests fail with `401`.
+3. Weather depended on a third-party key-based API, so missing quota, missing key, or rate limiting could blank the weather card.
+4. AI features depend on external APIs and can fail if provider credentials are missing, exhausted, or rate-limited.
+5. Render free or low-traffic services can cold-start or lag behind Vercel deploy timing.
+
+## Precautions To Prevent Future Breakage
+
+1. Keep a working `VITE_API_URL` in Vercel environment settings and verify it after each deploy.
+2. Keep `GROQ_API_KEY`, `WEATHERAPI_KEY`, `GOOGLE_CLIENT_ID`, `MONGODB_URI`, and `JWT_SECRET` configured in Render.
+3. Use an uptime monitor on both the frontend home page and backend health endpoint.
+4. After every push, verify `auth`, `weather`, `chat`, and one upload-based endpoint from production.
+5. Avoid relying on only one external weather provider; keep a fallback, which this repo now does.
+6. Expire bad sessions cleanly by forcing logout on `401` responses instead of silently bouncing users around the app.
+7. Keep deploy-time environment variables documented and versioned in `.env.example`, but never commit real secrets.
 
 ## Known Gaps
 
