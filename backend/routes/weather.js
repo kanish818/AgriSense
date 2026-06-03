@@ -194,6 +194,17 @@ function transformWeatherApiResponse(data) {
     };
 }
 
+async function fetchOpenWeatherMapWeather(lat, lon) {
+    const apiKey = process.env.OPENWEATHERMAP_KEY;
+    if (!apiKey) {
+        throw new Error("OPENWEATHERMAP_KEY is not configured");
+    }
+
+    const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+    const response = await axios.get(url, { timeout: 10000 });
+    return response.data;
+}
+
 router.get("/", async (req, res) => {
     try {
         const { lat, lon } = req.query;
@@ -213,6 +224,13 @@ router.get("/", async (req, res) => {
             return res.json(transformWeatherApiResponse(response.data));
         } catch (weatherApiError) {
             console.error("WeatherAPI provider error:", weatherApiError.message);
+        }
+
+        try {
+            const fallbackData = await fetchOpenWeatherMapWeather(lat, lon);
+            return res.json(fallbackData);
+        } catch (openWeatherMapError) {
+            console.error("OpenWeatherMap provider error:", openWeatherMapError.message);
         }
 
         try {
