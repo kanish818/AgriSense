@@ -37,6 +37,16 @@ function mapWeatherCodeToDescription(code) {
     return codeMap[code] || "Weather unavailable";
 }
 
+function formatMetNoDescription(symbolCode) {
+    if (!symbolCode) return "Weather unavailable";
+    return symbolCode
+        .replace(/_/g, " ")
+        .replace(/\b(day|night)\b/gi, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 async function fetchOpenMeteoWeather(lat, lon) {
     const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&timezone=auto`;
     const geoUrl = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&language=en&format=json`;
@@ -70,6 +80,53 @@ async function fetchOpenMeteoWeather(lat, lon) {
             speed: Number(forecast.current.wind_speed_10m) / 3.6
         },
         source: "open-meteo"
+    };
+}
+
+async function fetchMetNoWeather(lat, lon) {
+    const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+    const response = await axios.get(url, {
+        timeout: 10000,
+        headers: {
+            "User-Agent": "AgriSense/1.0"
+        }
+    });
+
+    const timeseries = response.data?.properties?.timeseries || [];
+    const current = timeseries[0];
+    const details = current?.data?.instant?.details;
+
+    if (!details) {
+        throw new Error("met.no response missing weather fields");
+    }
+
+    const tempSeries = timeseries
+        .slice(0, 24)
+        .map((entry) => Number(entry?.data?.instant?.details?.air_temperature))
+        .filter((value) => Number.isFinite(value));
+
+    return {
+        main: {
+            temp: Number(details.air_temperature),
+            humidity: Number(details.relative_humidity),
+            feels_like: Number(details.air_temperature),
+            temp_min: tempSeries.length ? Math.min(...tempSeries) : Number(details.air_temperature),
+            temp_max: tempSeries.length ? Math.max(...tempSeries) : Number(details.air_temperature)
+        },
+        weather: [
+            {
+                description: formatMetNoDescription(
+                    current?.data?.next_1_hours?.summary?.symbol_code ||
+                    current?.data?.next_6_hours?.summary?.symbol_code ||
+                    current?.data?.next_12_hours?.summary?.symbol_code
+                )
+            }
+        ],
+        name: `Lat ${Number(lat).toFixed(2)}, Lon ${Number(lon).toFixed(2)}`,
+        wind: {
+            speed: Number(details.wind_speed)
+        },
+        source: "met-no"
     };
 }
 
@@ -163,6 +220,13 @@ router.get("/", async (req, res) => {
             return res.json(fallbackData);
         } catch (openMeteoError) {
             console.error("Open-Meteo provider error:", openMeteoError.message);
+        }
+
+        try {
+            const fallbackData = await fetchMetNoWeather(lat, lon);
+            return res.json(fallbackData);
+        } catch (metNoError) {
+            console.error("met.no provider error:", metNoError.message);
         }
 
         try {
