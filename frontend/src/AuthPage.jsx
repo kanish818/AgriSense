@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, MapPin, Eye, EyeOff } from 'lucide-react';
+import { API_BASE } from './config/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '612625868411-vl3fbn806es5tj5hcffq56m4igs01juf.apps.googleusercontent.com';
 
 export default function AuthPage({ onLogin }) {

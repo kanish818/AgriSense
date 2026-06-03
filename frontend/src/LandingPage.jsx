@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sun, Cloud, Droplets, Wind, MessageSquare, CreditCard, Menu, X, ChevronDown, Mic, MicOff, Send, Upload, Leaf, Sprout, FileText, ExternalLink, ThermometerSun, MapPin, LogOut, User, Volume2, VolumeX } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { API_BASE } from './config/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4001/api';
 const DEFAULT_WEATHER_COORDS = { lat: 28.61, lon: 77.2 };
 const API_TIMEOUT_MS = 20000;
 
