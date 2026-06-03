@@ -57,7 +57,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceError, setVoiceError] = useState('');
+  const [voiceStatus, setVoiceStatus] = useState('');
   const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordTimeoutRef = useRef(null);
+  const skipNextRecordingRef = useRef(false);
   const synthRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const voiceResponseEnabledRef = useRef(false);
@@ -213,6 +219,20 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     stream.getTracks().forEach((track) => track.stop());
   };
 
+  const clearRecordTimeout = () => {
+    if (recordTimeoutRef.current) {
+      clearTimeout(recordTimeoutRef.current);
+      recordTimeoutRef.current = null;
+    }
+  };
+
+  const stopMediaTracks = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
   // Request location permission manually
   const requestLocationPermission = () => {
     setIsRequestingLocation(true);
@@ -366,7 +386,9 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
       recognitionRef.current = recognition;
     } else {
       recognitionRef.current = null;
-      setVoiceError('Voice input is not supported in this browser. Use Chrome on desktop or Android.');
+      if (!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder)) {
+        setVoiceError('Voice input is not supported in this browser. Use Chrome on desktop or Android.');
+      }
     }
   }, [language]);
 
@@ -506,6 +528,13 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   };
 
   const stopListening = () => {
+    clearRecordTimeout();
+    setVoiceStatus('');
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      skipNextRecordingRef.current = true;
+      mediaRecorderRef.current.stop();
+    }
+    stopMediaTracks();
     try {
       voiceAbortRequestedRef.current = true;
       recognitionRef.current?.abort?.();
@@ -518,6 +547,7 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   const closeChatAssistant = () => {
     voiceResponseEnabledRef.current = false;
     setVoiceError('');
+    setVoiceStatus('');
     stopListening();
     stopSpeaking();
     setIsChatOpen(false);
@@ -608,6 +638,79 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
     }
   };
 
+  const sendVoiceMessage = async (audioBlob) => {
+    if (!token) {
+      onRequireAuth('Please login to use voice assistant.');
+      return;
+    }
+    if (!audioBlob || audioBlob.size === 0) {
+      const message = 'No speech was detected. Try speaking a little louder and closer to the mic.';
+      setVoiceError(message);
+      appendVoiceNotice(`🎤 ${message}`);
+      return;
+    }
+
+    const formData = new FormData();
+    const extension = audioBlob.type.includes('mp4') ? 'm4a' : audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+    formData.append('audio', audioBlob, `voice-input.${extension}`);
+    formData.append('language', language);
+
+    setVoiceStatus('Processing your voice message...');
+    setIsLoading(true);
+    voiceResponseEnabledRef.current = true;
+
+    try {
+      const res = await requestWithTimeout(`${API_BASE}/chat`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      }, 45000);
+
+      const data = res.data || {};
+      if (res.status === 401) {
+        onRequireAuth('Your session expired. Please login again.', { forceLogout: true });
+        return;
+      }
+      if (res.status === 503 && data.setupGuide) {
+        const botResponse = `⚠️ ${data.response || data.message}\n\nSetup Guide: ${data.setupGuide}`;
+        setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
+        return;
+      }
+      if (!res.ok) {
+        const fallbackMessage = res.error === 'timeout'
+          ? '⏳ Voice processing took too long. Please try a shorter query.'
+          : (data.message || 'Voice processing failed.');
+        setVoiceError(fallbackMessage);
+        setChatHistory(prev => [...prev, { role: 'bot', content: `❌ ${fallbackMessage}` }]);
+        return;
+      }
+
+      const transcript = data.transcript?.trim();
+      const botResponse = data.response || data.message || 'Sorry, something went wrong.';
+
+      if (transcript) {
+        setChatHistory(prev => [...prev, { role: 'user', content: transcript }, { role: 'bot', content: botResponse }]);
+      } else {
+        setChatHistory(prev => [...prev, { role: 'bot', content: botResponse }]);
+      }
+
+      if (voiceResponseEnabledRef.current && isChatOpenRef.current) {
+        speakText(botResponse);
+      }
+    } catch (error) {
+      console.error('Voice chat error:', error);
+      const message = 'Could not process your voice message. Please check your connection and try again.';
+      setVoiceError(message);
+      setChatHistory(prev => [...prev, { role: 'bot', content: `❌ ${message}` }]);
+    } finally {
+      setVoiceStatus('');
+      voiceResponseEnabledRef.current = false;
+      setIsLoading(false);
+    }
+  };
+
   // Chat
   const handleChatSubmit = async (e) => {
     e?.preventDefault();
@@ -617,13 +720,100 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
   // Voice
   const toggleVoice = async () => {
     if (!user) { onRequireAuth('Please login to use voice assistant.'); return; }
-    if (!recognitionRef.current) { alert('Voice input is not supported in your browser. Please use Chrome.'); return; }
     if (isListening) {
       voiceResponseEnabledRef.current = false;
-      stopListening();
+      setVoiceStatus('Processing your voice message...');
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      } else {
+        stopListening();
+      }
     } else {
       stopSpeaking();
       setVoiceError('');
+      setVoiceStatus('');
+
+      if (navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaStreamRef.current = stream;
+
+          const mimeType = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg;codecs=opus'
+          ].find((type) => window.MediaRecorder.isTypeSupported?.(type)) || '';
+          const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+          audioChunksRef.current = [];
+          skipNextRecordingRef.current = false;
+
+          recorder.onstart = () => {
+            setIsListening(true);
+            setVoiceStatus('Listening... tap the mic again or wait a few seconds to send.');
+          };
+          recorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+              audioChunksRef.current.push(event.data);
+            }
+          };
+          recorder.onerror = (event) => {
+            console.error('MediaRecorder error:', event);
+            const message = 'Voice recording failed. Please check microphone permissions and try again.';
+            setVoiceError(message);
+            appendVoiceNotice(`🎤 ${message}`);
+            setVoiceStatus('');
+            setIsListening(false);
+            clearRecordTimeout();
+            stopMediaTracks();
+          };
+          recorder.onstop = async () => {
+            const shouldSkip = skipNextRecordingRef.current;
+            const recordedMimeType = recorder.mimeType || mimeType || 'audio/webm';
+            const audioBlob = new Blob(audioChunksRef.current, { type: recordedMimeType });
+            audioChunksRef.current = [];
+            mediaRecorderRef.current = null;
+            clearRecordTimeout();
+            stopMediaTracks();
+            setIsListening(false);
+
+            if (shouldSkip) {
+              skipNextRecordingRef.current = false;
+              setVoiceStatus('');
+              return;
+            }
+
+            await sendVoiceMessage(audioBlob);
+          };
+
+          mediaRecorderRef.current = recorder;
+          recorder.start();
+          clearRecordTimeout();
+          recordTimeoutRef.current = setTimeout(() => {
+            if (mediaRecorderRef.current?.state === 'recording') {
+              mediaRecorderRef.current.stop();
+            }
+          }, 9000);
+          return;
+        } catch (error) {
+          console.error('Voice recorder start error:', error);
+          const errorCode = error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError'
+            ? 'not-allowed'
+            : 'audio-capture';
+          const message = getVoiceErrorMessage(errorCode, language);
+          setVoiceError(message);
+          appendVoiceNotice(`🎤 ${message}`);
+          setIsListening(false);
+          setVoiceStatus('');
+          return;
+        }
+      }
+
+      if (!recognitionRef.current) {
+        alert('Voice input is not supported in your browser. Please use Chrome.');
+        return;
+      }
+
       recognitionRef.current.lang = getRecognitionLanguage(language);
       try {
         await ensureMicrophoneAccess();
@@ -1139,7 +1329,9 @@ export default function LandingPage({ user, token, onLogout, onRequireAuth }) {
               </div>
               <div className="min-h-[1.25rem] pt-2 text-xs">
                 {isListening ? (
-                  <p className="text-green-600">Listening in {language}...</p>
+                  <p className="text-green-600">{voiceStatus || `Listening in ${language}...`}</p>
+                ) : voiceStatus ? (
+                  <p className="text-blue-600">{voiceStatus}</p>
                 ) : voiceError ? (
                   <p className="text-red-500">{voiceError}</p>
                 ) : null}

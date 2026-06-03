@@ -1,4 +1,5 @@
 const axios = require("axios");
+const fs = require("fs");
 const Groq = require("groq-sdk");
 const User = require("../models/User");
 const Chat = require("../models/Chat");
@@ -17,6 +18,7 @@ const groq = groqApiKey && groqApiKey !== "your_groq_api_key_here"
   : null;
 
 const langMap = { english: "English", hindi: "Hindi", punjabi: "Punjabi" };
+const speechLangCodeMap = { english: "en", hindi: "hi", punjabi: "pa" };
 
 async function getFarmerProfile(userId) {
   try {
@@ -170,7 +172,48 @@ async function generatePureRagAnswer(message, language, farmerProfile, historyCo
   return response.data;
 }
 
+async function transcribeAudioUpload(file, language) {
+  if (!groq) {
+    throw new Error("Groq client is not configured");
+  }
+
+  const targetLanguage = speechLangCodeMap[language] || "en";
+  const fileName = file.originalname || `voice-input.${(file.mimetype || "audio/webm").split("/")[1] || "webm"}`;
+  const prompt = targetLanguage === "hi"
+    ? "The speaker is using Hindi and may ask about Indian farming, weather, crops, or soil."
+    : targetLanguage === "pa"
+      ? "The speaker is using Punjabi and may ask about Indian farming, weather, crops, or soil."
+      : "The speaker is using English and may ask about Indian farming, weather, crops, or soil.";
+
+  const uploadableFile = await Groq.toFile(
+    fs.createReadStream(file.path),
+    fileName,
+    { type: file.mimetype || undefined }
+  );
+
+  const transcription = await groq.audio.transcriptions.create({
+    file: uploadableFile,
+    model: "whisper-large-v3",
+    language: targetLanguage,
+    prompt,
+    response_format: "json",
+    temperature: 0,
+  });
+
+  return transcription.text?.trim() || "";
+}
+
+async function cleanupUploadedFile(filePath) {
+  if (!filePath) return;
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    console.warn("Temporary audio cleanup skipped:", error.message);
+  }
+}
+
 exports.handleChat = async (req, res) => {
+  let uploadedFilePath = req.file?.path;
   try {
     if (!groqApiKey || groqApiKey === "your_groq_api_key_here") {
       return res.status(503).json({
@@ -180,8 +223,15 @@ exports.handleChat = async (req, res) => {
       });
     }
 
-    const { message, language = "english" } = req.body;
+    const language = (req.body.language || "english").toLowerCase();
     const userId = req.userId;
+    let message = typeof req.body.message === "string" ? req.body.message.trim() : "";
+    let transcript = null;
+
+    if (!message && req.file) {
+      transcript = await transcribeAudioUpload(req.file, language);
+      message = transcript;
+    }
 
     if (!message) {
       return res.status(400).json({ message: "Message is required" });
@@ -229,6 +279,7 @@ exports.handleChat = async (req, res) => {
 
     res.json({
       response: answer,
+      transcript,
       contexts_used: contextsUsed,
       source,
       retrieval_ms: retrievalMs,
@@ -238,5 +289,7 @@ exports.handleChat = async (req, res) => {
   } catch (error) {
     console.error("Chat Controller Error:", error);
     res.status(500).json({ message: "Internal server error" });
+  } finally {
+    await cleanupUploadedFile(uploadedFilePath);
   }
 };
